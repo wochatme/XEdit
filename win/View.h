@@ -561,6 +561,23 @@ public:
 		ATLASSERT(m_txtView.IsWindow());
 
 		m_workView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
+#if 0
+		if (m_workView.IsWindow())
+		{
+			LONG_PTR dwStyle;
+			dwStyle = ::GetWindowLongPtr(m_workView, GWL_STYLE);
+			dwStyle &= ~(WS_BORDER | WS_CAPTION | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_OVERLAPPED | WS_SIZEBOX | WS_SYSMENU | WS_THICKFRAME);
+			dwStyle |= WS_CHILD;
+			::SetWindowLongPtr(m_workView, GWL_STYLE, dwStyle);
+			::SetWindowLong(m_workView, GWL_STYLE, ::GetWindowLong(m_workView, GWL_STYLE) & ~WS_POPUP);
+			::SetWindowLong(m_workView, GWL_STYLE, ::GetWindowLong(m_workView, GWL_STYLE) & WS_CHILD);
+			::SetParent(m_workView, m_hWnd);
+			::ShowWindow(m_workView, SW_SHOW);
+			::InvalidateRect(m_workView, NULL, 1);
+			::UpdateWindow(m_workView);
+		}
+#endif 
+
 		ATLASSERT(m_workView.IsWindow());
 		m_workView.sci_SetTechnology(SC_TECHNOLOGY_DIRECTWRITE);
 		m_workView.sci_SetCodePage(SC_CP_UTF8);
@@ -974,8 +991,7 @@ public:
 				::SetFocus(m_hWndPane[m_nSinglePane]);
 			}
 		}
-
-		bHandled = FALSE;
+		//bHandled = FALSE;
 		return 1;
 	}
 

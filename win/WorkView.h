@@ -2,10 +2,77 @@
 
 #pragma once
 
+struct PROCESS_INFO
+{
+	DWORD dwProcessId;
+	HWND hWnd;
+};
+
+BOOL CALLBACK EnumWindowCallBack(HWND hWnd, LPARAM lParam)
+{
+	PROCESS_INFO* pProcessWindow = (PROCESS_INFO*)lParam;
+
+	DWORD dwProcessId;
+	GetWindowThreadProcessId(hWnd, &dwProcessId);
+
+	if (pProcessWindow->dwProcessId == dwProcessId && IsWindowEnabled(hWnd) && GetParent(hWnd) == NULL)
+	{
+		pProcessWindow->hWnd = hWnd;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 class CWorkView
 {
 public:
     HWND m_hWnd = nullptr;
+#if 0
+	HWND Create(
+		_In_opt_ HWND hWndParent,
+		_In_ _U_RECT rect = NULL,
+		_In_opt_z_ LPCTSTR szWindowName = NULL,
+		_In_ DWORD dwStyle = 0,
+		_In_ DWORD dwExStyle = 0,
+		_In_ _U_MENUorID MenuOrID = 0U,
+		_In_opt_ LPVOID lpCreateParam = NULL)
+	{
+		STARTUPINFO si = { 0 };
+		si.cb = sizeof(STARTUPINFO);
+		si.dwFlags = STARTF_USESHOWWINDOW;
+		si.wShowWindow = SW_HIDE;
+
+		PROCESS_INFORMATION pi = { 0 };
+		if (CreateProcess(L"C:\\build\\t2\\pterm2.exe", NULL, NULL, NULL, false, 0, NULL, NULL, &si, &pi))
+		{
+			PROCESS_INFO procwin;
+			procwin.dwProcessId = pi.dwProcessId;
+			procwin.hWnd = NULL;
+
+			WaitForInputIdle(pi.hProcess, 500);
+
+			EnumWindows(EnumWindowCallBack, (LPARAM)&procwin);
+			if (NULL == procwin.hWnd)
+			{
+				Sleep(200);
+				EnumWindows(EnumWindowCallBack, (LPARAM)&procwin);
+			}
+			m_hWnd =  procwin.hWnd;
+		}
+		return m_hWnd;
+	}
+#endif 
+	operator HWND() const throw()
+	{
+		return m_hWnd;
+	}
+
+	BOOL IsWindow() const throw()
+	{
+		return ::IsWindow(m_hWnd);
+	}
+
 
 	HWND Create(
 		_In_opt_ HWND hWndParent,
@@ -27,15 +94,6 @@ public:
 		return m_hWnd;
 	}
 #endif
-	operator HWND() const throw()
-	{
-		return m_hWnd;
-	}
-
-	BOOL IsWindow() const throw()
-	{
-		return ::IsWindow(m_hWnd);
-	}
 
 	BOOL SetWindowPos(
 		HWND hWndInsertAfter,
@@ -173,5 +231,4 @@ public:
 	{
 		return true;
 	}
-
 };
