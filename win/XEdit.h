@@ -10,6 +10,7 @@
 #include "config.h"
 #include "network.h"
 
+#define INPUT_BUF_INPUT_MAX     (1<<18)
 /*
  * libCurl Proxy type. Please check: https://curl.se/libcurl/c/CURLOPT_PROXYTYPE.html
  * 0 - No Proxy
@@ -71,3 +72,6 @@ extern ID2D1Factory* g_pD2DFactory;
 extern IDWriteFactory* g_pDWriteFactory;
 
 extern UINT  g_nDPI;
+
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)

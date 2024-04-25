@@ -29,6 +29,14 @@ class CView : public CWindowImpl<CView>
 	enum { INPUT_CHAT_GAP = 40, HEAD_TAB_HEIGHT = 0 };
 	int  m_nInputWinHeight = 100;
 
+	CWorkView m_workView;
+	CTXTView m_txtView;
+	CInputView m_inputView;
+	
+	U8* m_inputBuf = nullptr;
+	U32 m_inputMax = INPUT_BUF_INPUT_MAX;
+	U32 m_inputLen = 0;
+
 	HCURSOR m_hCursorHand;
 
 	ID2D1HwndRenderTarget* m_pD2DRenderTarget = nullptr;
@@ -72,6 +80,21 @@ public:
 		m_hWndPane[SPLIT_PANE_RIGHT] = NULL;
 
 		::SetRectEmpty(&m_rcSplitter);
+
+		m_inputMax = INPUT_BUF_INPUT_MAX;
+		m_inputLen = 0;
+		m_inputBuf = (U8*)VirtualAlloc(NULL, INPUT_BUF_INPUT_MAX, MEM_COMMIT, PAGE_READWRITE);
+		ATLASSERT(m_inputBuf);
+	}
+
+	~CView()
+	{
+		if (nullptr != m_inputBuf)
+		{
+			VirtualFree(m_inputBuf, 0, MEM_RELEASE);
+			m_inputBuf = nullptr;
+		}
+		m_inputLen = 0;
 	}
 
 public:
@@ -87,6 +110,7 @@ public:
 		MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBackground)
 		MESSAGE_HANDLER(WM_PAINT, OnPaint)
 		MESSAGE_HANDLER(WM_PRINTCLIENT, OnPaint)
+		MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
 		if (IsInteractive())
 		{
 			MESSAGE_HANDLER(WM_SETCURSOR, OnSetCursor)
@@ -530,8 +554,35 @@ public:
 	LRESULT OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled)
 	{
 		Init();
+		
+		m_hCursorHand = ::LoadCursor(NULL, IDC_HAND);
 
-		bHandled = FALSE;
+		m_txtView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
+		ATLASSERT(m_txtView.IsWindow());
+
+		m_workView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
+		ATLASSERT(m_workView.IsWindow());
+		m_workView.sci_SetTechnology(SC_TECHNOLOGY_DIRECTWRITE);
+		m_workView.sci_SetCodePage(SC_CP_UTF8);
+		m_workView.sci_SetEOLMode(SC_EOL_LF);
+		m_workView.sci_SetWrapMode(SC_WRAP_WORD);
+		m_workView.sci_StyleSetFont(STYLE_DEFAULT, "Courier New");
+		m_workView.sci_StyleSetFontSize(STYLE_DEFAULT, 11);
+
+		m_inputView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
+		ATLASSERT(m_inputView.IsWindow());
+
+		m_inputView.sci_SetTechnology(SC_TECHNOLOGY_DIRECTWRITE);
+		m_inputView.sci_SetCodePage(SC_CP_UTF8);
+		m_inputView.sci_SetEOLMode(SC_EOL_LF);
+		m_inputView.sci_SetWrapMode(SC_WRAP_WORD);
+		m_inputView.sci_StyleSetFont(STYLE_DEFAULT, "Courier New");
+		m_inputView.sci_StyleSetFontSize(STYLE_DEFAULT,11);
+
+		SetSplitterPanes(m_inputView, m_workView);
+		SetSplitterPosPct(40);
+
+		//bHandled = FALSE;
 		return 1;
 	}
 
@@ -573,12 +624,111 @@ public:
 			dhrtp.presentOptions = D2D1_PRESENT_OPTIONS_NONE;
 
 			ATLASSERT(nullptr != g_pD2DFactory);
-
+			ReleaseUnknown(m_pBrush);
+			ReleaseUnknown(m_pixelBitmap);
 			//hr = g_pD2DFactory->CreateHwndRenderTarget(renderTargetProperties, 
 			// hwndRenderTragetproperties, &m_pD2DRenderTarget);
 			hr = g_pD2DFactory->CreateHwndRenderTarget(drtp, dhrtp, &m_pD2DRenderTarget);
+			if (hr == S_OK && m_pD2DRenderTarget)
+			{
+				U32 pixel[4] = { 0xFFAAAAAA, 0xFFEEEEEE,0xFFEEEEEE,0xFFEEEEEE };
+				hr = m_pD2DRenderTarget->CreateBitmap(
+					D2D1::SizeU(4, 1), pixel, 4 << 2,
+					D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)),
+					&m_pixelBitmap);
+
+			}
 		}
 		return hr;
+	}
+
+	// called only if pane is empty
+	void DrawSplitterPaneD2D(int nPane)
+	{
+		RECT rect = {};
+		if (GetSplitterPaneRect(nPane, &rect))
+		{
+#if 0
+			T* pT = static_cast<T*>(this);
+			if ((pT->GetExStyle() & WS_EX_CLIENTEDGE) == 0)
+				dc.DrawEdge(&rect, EDGE_SUNKEN, BF_RECT | BF_ADJUST);
+			dc.FillRect(&rect, COLOR_APPWORKSPACE);
+#endif
+		}
+	}
+
+	void DrawSplitterBarD2D()
+	{
+		RECT rect = {};
+		if (GetSplitterBarRect(&rect))
+		{
+			if (m_pixelBitmap)
+			{
+				D2D1_RECT_F rectF = D2D1::RectF(
+					static_cast<FLOAT>(rect.left),
+					static_cast<FLOAT>(rect.top),
+					static_cast<FLOAT>(rect.right),
+					static_cast<FLOAT>(rect.bottom)
+				);
+				m_pD2DRenderTarget->DrawBitmap(m_pixelBitmap, &rectF);
+			}
+#if 0
+			dc.FillRect(&rect, COLOR_3DFACE);
+			if ((m_dwExtendedStyle & SPLIT_FLATBAR) != 0)
+			{
+				RECT rect1 = rect;
+				if (m_bVertical)
+					rect1.right = rect1.left + 1;
+				else
+					rect1.bottom = rect1.top + 1;
+				dc.FillRect(&rect1, COLOR_WINDOW);
+
+				rect1 = rect;
+				if (m_bVertical)
+					rect1.left = rect1.right - 1;
+				else
+					rect1.top = rect1.bottom - 1;
+				dc.FillRect(&rect1, COLOR_3DSHADOW);
+			}
+			else if ((m_dwExtendedStyle & SPLIT_GRADIENTBAR) != 0)
+			{
+				RECT rect2 = rect;
+				if (m_bVertical)
+					rect2.left = (rect.left + rect.right) / 2 - 1;
+				else
+					rect2.top = (rect.top + rect.bottom) / 2 - 1;
+
+				dc.GradientFillRect(rect2, ::GetSysColor(COLOR_3DFACE), ::GetSysColor(COLOR_3DSHADOW), m_bVertical);
+			}
+
+			// draw 3D edge if needed
+			if ((GetExStyle() & WS_EX_CLIENTEDGE) != 0)
+				dc.DrawEdge(&rect, EDGE_RAISED, m_bVertical ? (BF_LEFT | BF_RIGHT) : (BF_TOP | BF_BOTTOM));
+#endif 
+		}
+	}
+
+	void DrawSplitterD2D()
+	{
+		if ((m_nSinglePane == SPLIT_PANE_NONE) && (m_xySplitterPos == -1))
+			return;
+
+		if (m_nSinglePane == SPLIT_PANE_NONE)
+		{
+			DrawSplitterBarD2D();
+
+			for (int nPane = 0; nPane < m_nPanesCount; nPane++)
+			{
+				if (m_hWndPane[nPane] == NULL)
+					DrawSplitterPaneD2D(nPane);
+			}
+		}
+		else
+		{
+			if (m_hWndPane[m_nSinglePane] == NULL)
+				DrawSplitterPaneD2D(m_nSinglePane);
+		}
+
 	}
 
 	LRESULT OnPaint(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& /*bHandled*/)
@@ -602,7 +752,7 @@ public:
 			m_pD2DRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 			m_pD2DRenderTarget->Clear(D2D1::ColorF(0xEEEEEE));
 
-			//DrawSplitterD2D();
+			DrawSplitterD2D();
 			//DrawChatButtonD2D();
 			//DrawDefaultTabD2D();
 
@@ -712,7 +862,7 @@ public:
 			::ReleaseCapture();
 		}
 
-		bHandled = FALSE;
+		//bHandled = FALSE;
 		return 1;
 	}
 
@@ -724,7 +874,7 @@ public:
 			::ReleaseCapture();
 		}
 
-		bHandled = FALSE;
+		//bHandled = FALSE;
 		return 1;
 	}
 
@@ -866,6 +1016,7 @@ public:
 		GetSystemSettings(false);
 	}
 
+#if 0
 	void UpdateSplitterLayout()
 	{
 		if ((m_nSinglePane == SPLIT_PANE_NONE) && (m_xySplitterPos == -1))
@@ -883,6 +1034,60 @@ public:
 				{
 					if (m_hWndPane[nPane] != NULL)
 						::SetWindowPos(m_hWndPane[nPane], NULL, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
+					else
+						InvalidateRect(&rect);
+				}
+			}
+		}
+		else
+		{
+			if (GetSplitterPaneRect(m_nSinglePane, &rect))
+			{
+				if (m_hWndPane[m_nSinglePane] != NULL)
+					::SetWindowPos(m_hWndPane[m_nSinglePane], NULL, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER);
+				else
+					InvalidateRect(&rect);
+			}
+		}
+	}
+#endif 
+
+	void UpdateSplitterLayout()
+	{
+		if ((m_nSinglePane == SPLIT_PANE_NONE) && (m_xySplitterPos == -1))
+			return;
+
+		RECT rect = {};
+		if (m_nSinglePane == SPLIT_PANE_NONE)
+		{
+			int top;
+			if (GetSplitterBarRect(&rect))
+				InvalidateRect(&rect);
+
+			for (int nPane = 0; nPane < m_nPanesCount; nPane++)
+			{
+				if (GetSplitterPaneRect(nPane, &rect))
+				{
+					top = rect.top;
+					if (m_hWndPane[nPane] != NULL)
+					{
+						if (nPane == SPLIT_PANE_LEFT)
+						{
+							top = rect.bottom - rect.top - m_nInputWinHeight;
+							m_txtView.SetWindowPos(NULL,
+								rect.left,
+								rect.top,
+								rect.right - rect.left,
+								rect.bottom - rect.top - m_nInputWinHeight - INPUT_CHAT_GAP,
+								SWP_NOZORDER
+							);
+						}
+						::SetWindowPos(m_hWndPane[nPane], NULL, 
+							rect.left, 
+							top, 
+							rect.right - rect.left, 
+							rect.bottom - top, SWP_NOZORDER);
+					}
 					else
 						InvalidateRect(&rect);
 				}
@@ -1109,9 +1314,11 @@ public:
 	LRESULT OnSize(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled)
 	{
 		if (wParam != SIZE_MINIMIZED)
+		{
 			this->SetSplitterRect();
-
-		bHandled = FALSE;
+			ReleaseUnknown(m_pD2DRenderTarget);
+			Invalidate();
+		}
 		return 1;
 	}
 
@@ -1125,4 +1332,28 @@ public:
 		return 0;
 	}
 
+	LRESULT OnNotify(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+	{
+		LPNMHDR lpnmhdr = (LPNMHDR)lParam;
+		if ((lpnmhdr->hwndFrom == m_inputView) && (lpnmhdr->code == SCN_CHARADDED))
+		{
+			bool heldControl = (GetKeyState(VK_CONTROL) & 0x80) != 0; /* does the user hold Ctrl key? */
+			int pos = m_inputView.sci_GetCurrentPosition();
+			char ch = m_inputView.sci_GetCharAtPosition(pos - 1);
+			if (ch == '\n' && heldControl == false) /* the user hit the ENTER key */
+			{
+				int len;
+				U32 input_len = 0;
+				m_inputView.sci_GetTextLength(input_len);
+				if (input_len > INPUT_BUF_INPUT_MAX - 9) /* we only allow 256KB input data */
+					input_len = INPUT_BUF_INPUT_MAX - 9;
+				
+				len = m_inputView.sci_GetText((char*)m_inputBuf, INPUT_BUF_INPUT_MAX);
+				m_inputBuf[len] = '\0';
+
+				m_inputView.sci_SetText("");
+			}
+		}
+		return 1;
+	}
 };

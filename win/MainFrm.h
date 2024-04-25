@@ -71,6 +71,7 @@ public:
 		CreateSimpleStatusBar();
 
 		m_hWndClient = m_view.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, WS_EX_CLIENTEDGE);
+		ATLASSERT(m_view.IsWindow());
 		// replace with appropriate values for the app
 		//m_view.SetScrollSize(2000, 1000);
 
