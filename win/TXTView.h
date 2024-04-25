@@ -3,741 +3,18 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#if 0
-#if 0
-typedef D2D1_RECT_F RectF;
 
-struct MakeDWriteTextRange : public DWRITE_TEXT_RANGE
-{
-	inline MakeDWriteTextRange(UINT32 startPosition, UINT32 length)
-	{
-		this->startPosition = startPosition;
-		this->length = length;
-	}
-
-	// Overload to extend to end of text.
-	inline MakeDWriteTextRange(UINT32 startPosition)
-	{
-		this->startPosition = startPosition;
-		this->length = UINT32_MAX - startPosition;
-	}
-};
-
-////////////////////////////////////////
-// COM help.
-// Releases a COM object and nullifies pointer.
-template <typename InterfaceType>
-inline void SafeRelease(InterfaceType** currentObject)
-{
-	if (*currentObject != NULL)
-	{
-		(*currentObject)->Release();
-		*currentObject = NULL;
-	}
+#define DECLARE_WND_CLASS_TEXT(WndClassName) \
+static ATL::CWndClassInfo& GetWndClassInfo() \
+{ \
+	static ATL::CWndClassInfo wc = \
+	{ \
+		{ sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS, StartWindowProc, \
+		  0, 0, NULL, NULL, NULL, (HBRUSH)(COLOR_WINDOW + 1), NULL, WndClassName, NULL }, \
+		NULL, NULL, IDC_IBEAM, TRUE, 0, _T("") \
+	}; \
+	return wc; \
 }
-
-
-// Acquires an additional reference, if non-null.
-template <typename InterfaceType>
-inline InterfaceType* SafeAcquire(InterfaceType* newObject)
-{
-	if (newObject != NULL)
-		newObject->AddRef();
-
-	return newObject;
-}
-
-
-// Sets a new COM object, releasing the old one.
-template <typename InterfaceType>
-inline void SafeSet(InterfaceType** currentObject, InterfaceType* newObject)
-{
-	SafeAcquire(newObject);
-	SafeRelease(currentObject);
-	*currentObject = newObject;
-}
-
-
-// Releases a COM object and nullifies pointer.
-template <typename InterfaceType>
-inline InterfaceType* SafeDetach(InterfaceType** currentObject)
-{
-	InterfaceType* oldObject = *currentObject;
-	*currentObject = NULL;
-	return oldObject;
-}
-
-
-// Sets a new COM object, acquiring the reference.
-template <typename InterfaceType>
-inline void SafeAttach(InterfaceType** currentObject, InterfaceType* newObject)
-{
-	SafeRelease(currentObject);
-	*currentObject = newObject;
-}
-
-// Generic COM base implementation for classes, since DirectWrite uses
-// callbacks for several different kinds of objects, particularly the
-// text renderer and inline objects.
-//
-// Example:
-//
-//  class RenderTarget : public ComBase<QiList<IDWriteTextRenderer> >
-//
-template <typename InterfaceChain>
-class ComBase : public InterfaceChain
-{
-public:
-	explicit ComBase() throw()
-		: refValue_(0)
-	{ }
-
-	// IUnknown interface
-	IFACEMETHOD(QueryInterface)(IID const& iid, OUT void** ppObject)
-	{
-		*ppObject = NULL;
-		InterfaceChain::QueryInterfaceInternal(iid, ppObject);
-		if (*ppObject == NULL)
-			return E_NOINTERFACE;
-
-		AddRef();
-		return S_OK;
-	}
-
-	IFACEMETHOD_(ULONG, AddRef)()
-	{
-		return InterlockedIncrement(&refValue_);
-	}
-
-	IFACEMETHOD_(ULONG, Release)()
-	{
-		ULONG newCount = InterlockedDecrement(&refValue_);
-		if (newCount == 0)
-			delete this;
-
-		return newCount;
-	}
-
-	virtual ~ComBase()
-	{ }
-
-protected:
-	ULONG refValue_;
-
-private:
-	// No copy construction allowed.
-	ComBase(const ComBase& b);
-	ComBase& operator=(ComBase const&);
-};
-
-struct QiListNil
-{
-};
-
-// When the QueryInterface list refers to itself as class,
-// which hasn't fully been defined yet.
-template <typename InterfaceName, typename InterfaceChain>
-class QiListSelf : public InterfaceChain
-{
-public:
-	inline void QueryInterfaceInternal(IID const& iid, OUT void** ppObject) throw()
-	{
-		if (iid != __uuidof(InterfaceName))
-			return InterfaceChain::QueryInterfaceInternal(iid, ppObject);
-
-		*ppObject = static_cast<InterfaceName*>(this);
-	}
-};
-
-// When this interface is implemented and more follow.
-template <typename InterfaceName, typename InterfaceChain = QiListNil>
-class QiList : public InterfaceName, public InterfaceChain
-{
-public:
-	inline void QueryInterfaceInternal(IID const& iid, OUT void** ppObject) throw()
-	{
-		if (iid != __uuidof(InterfaceName))
-			return InterfaceChain::QueryInterfaceInternal(iid, ppObject);
-
-		*ppObject = static_cast<InterfaceName*>(this);
-	}
-};
-
-
-// When the this is the last implemented interface in the list.
-template <typename InterfaceName>
-class QiList<InterfaceName, QiListNil> : public InterfaceName
-{
-public:
-	inline void QueryInterfaceInternal(IID const& iid, OUT void** ppObject) throw()
-	{
-		if (iid != __uuidof(InterfaceName))
-			return;
-
-		*ppObject = static_cast<InterfaceName*>(this);
-	}
-};
-
-class DECLSPEC_UUID("1CD7C44F-526B-492a-B780-EF9C4159B653") DrawingEffect
-	: public ComBase<QiList<IUnknown> >
-{
-public:
-	DrawingEffect(UINT32 color)
-		: color_(color)
-	{ }
-
-	inline UINT32 GetColor() const throw()
-	{
-		// Returns the BGRA value for D2D.
-		return color_;
-	}
-
-	inline COLORREF GetColorRef() const throw()
-	{
-		// Returns color as COLORREF.
-		return GetColorRef(color_);
-	}
-
-	static inline COLORREF GetColorRef(UINT32 bgra) throw()
-	{
-		// Swaps color order (bgra <-> rgba) from D2D/GDI+'s to a COLORREF.
-		// This also leaves the top byte 0, since alpha is ignored anyway.
-		return RGB(GetBValue(bgra), GetGValue(bgra), GetRValue(bgra));
-	}
-
-	static inline COLORREF GetBgra(COLORREF rgb) throw()
-	{
-		// Swaps color order (bgra <-> rgba) from COLORREF to D2D/GDI+'s.
-		// Sets alpha to full opacity.
-		return RGB(GetBValue(rgb), GetGValue(rgb), GetRValue(rgb)) | 0xFF000000;
-	}
-
-protected:
-	// The color is stored as BGRA, with blue in the lowest byte,
-	// then green, red, alpha; which is what D2D, GDI+, and GDI DIBs use.
-	// GDI's COLORREF stores red as the lowest byte.
-	UINT32 color_;
-};
-
-
-
-// Intermediate render target for UI to draw to either a D2D or GDI surface.
-class DECLSPEC_UUID("4327AC14-3172-4807-BF40-02C7475A2520") RenderTarget
-	: public ComBase<
-	QiListSelf<RenderTarget,
-	QiList<IDWriteTextRenderer>
-	> >
-{
-public:
-	virtual ~RenderTarget() {};
-
-	virtual void BeginDraw() = NULL;
-	virtual void EndDraw() = NULL;
-	virtual void Clear(UINT32 color) = NULL;
-	virtual void Resize(UINT width, UINT height) = NULL;
-	virtual void UpdateMonitor() = NULL;
-
-	virtual void SetTransform(DWRITE_MATRIX const& transform) = NULL;
-	virtual void GetTransform(DWRITE_MATRIX & transform) = NULL;
-	virtual void SetAntialiasing(bool isEnabled) = NULL;
-
-
-	virtual void DrawTextLayout(
-		IDWriteTextLayout * textLayout,
-		const RectF & rect
-	) = NULL;
-
-	// Draws a single image, from the given coordinates, to the given coordinates.
-	// If the height and width differ, they will be scaled, but mirroring must be
-	// done via a matrix transform.
-	virtual void DrawImage(
-		IWICBitmapSource * image,
-		const RectF & sourceRect,  // where in source atlas texture
-		const RectF & destRect     // where on display to draw it
-	) = NULL;
-
-	virtual void FillRectangle(
-		const RectF & destRect,
-		const DrawingEffect & drawingEffect
-	) = NULL;
-
-protected:
-	// This context is not persisted, only existing on the stack as it
-	// is passed down through. This is mainly needed to handle cases
-	// where runs where no drawing effect set, like those of an inline
-	// object or trimming sign.
-	struct Context
-	{
-		Context(RenderTarget* initialTarget, IUnknown* initialDrawingEffect)
-			: target(initialTarget),
-			drawingEffect(initialDrawingEffect)
-		{ }
-
-		// short lived weak pointers
-		RenderTarget* target;
-		IUnknown* drawingEffect;
-	};
-
-	IUnknown* GetDrawingEffect(void* clientDrawingContext, IUnknown * drawingEffect)
-	{
-		// Callbacks use this to use a drawing effect from the client context
-		// if none was passed into the callback.
-		if (drawingEffect != NULL)
-			return drawingEffect;
-
-		return (reinterpret_cast<Context*>(clientDrawingContext))->drawingEffect;
-	}
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class RenderTargetD2D : public RenderTarget
-{
-public:
-	RenderTargetD2D(ID2D1Factory* d2dFactory, IDWriteFactory* dwriteFactory, HWND hwnd)
-		: hwnd_(hwnd),
-		hmonitor_(NULL),
-		d2dFactory_(SafeAcquire(d2dFactory)),
-		dwriteFactory_(SafeAcquire(dwriteFactory)),
-		target_(),
-		brush_()
-	{
-	}
-
-	HRESULT static Create(ID2D1Factory* d2dFactory, IDWriteFactory* dwriteFactory, HWND hwnd, OUT RenderTarget** renderTarget)
-	{
-		*renderTarget = NULL;
-		HRESULT hr = S_OK;
-
-		RenderTargetD2D* newRenderTarget = SafeAcquire(new(std::nothrow) RenderTargetD2D(d2dFactory, dwriteFactory, hwnd));
-		if (newRenderTarget == NULL)
-		{
-			return E_OUTOFMEMORY;
-		}
-
-		hr = newRenderTarget->CreateTarget();
-		if (FAILED(hr))
-			SafeRelease(&newRenderTarget);
-
-		*renderTarget = SafeDetach(&newRenderTarget);
-
-		return hr;
-	}
-
-	virtual ~RenderTargetD2D()
-	{
-		SafeRelease(&brush_);
-		SafeRelease(&target_);
-#if 0
-		SafeRelease(&d2dFactory_);
-		SafeRelease(&dwriteFactory_);
-#endif 
-	}
-
-	virtual void BeginDraw()
-	{
-		target_->BeginDraw();
-		target_->SetTransform(D2D1::Matrix3x2F::Identity());
-	}
-	virtual void EndDraw()
-	{
-		HRESULT hr = target_->EndDraw();
-		// If the device is lost for any reason, we need to recreate it.
-		if (hr == D2DERR_RECREATE_TARGET)
-		{
-			// Flush resources and recreate them.
-			// This is very rare for a device to be lost,
-			// but it can occur when connecting via Remote Desktop.
-			//imageCache_.clear();
-			hmonitor_ = NULL;
-			CreateTarget();
-		}
-	}
-
-	virtual void Clear(UINT32 color)
-	{
-		target_->Clear(D2D1::ColorF(color));
-	}
-
-	virtual void Resize(UINT width, UINT height)
-	{
-		D2D1_SIZE_U size;
-		size.width = width;
-		size.height = height;
-		target_->Resize(size);
-	}
-
-	virtual void UpdateMonitor()
-	{
-		// Updates rendering parameters according to current monitor.
-		HMONITOR monitor = MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST);
-		if (monitor != hmonitor_)
-		{
-			// Create based on monitor settings, rather than the defaults of
-			// gamma=1.8, contrast=.5, and clearTypeLevel=.5
-			IDWriteRenderingParams* renderingParams = NULL;
-			dwriteFactory_->CreateMonitorRenderingParams(
-				monitor,
-				&renderingParams
-			);
-			target_->SetTextRenderingParams(renderingParams);
-
-			hmonitor_ = monitor;
-			InvalidateRect(hwnd_, NULL, FALSE);
-
-			SafeRelease(&renderingParams);
-		}
-	}
-
-	virtual void SetTransform(DWRITE_MATRIX const& transform)
-	{
-		target_->SetTransform(reinterpret_cast<const D2D1_MATRIX_3X2_F*>(&transform));
-	}
-
-	virtual void GetTransform(DWRITE_MATRIX& transform)
-	{
-		target_->GetTransform(reinterpret_cast<D2D1_MATRIX_3X2_F*>(&transform));
-	}
-
-	virtual void SetAntialiasing(bool isEnabled)
-	{
-		target_->SetAntialiasMode(isEnabled ? D2D1_ANTIALIAS_MODE_PER_PRIMITIVE : D2D1_ANTIALIAS_MODE_ALIASED);
-	}
-
-	virtual void DrawTextLayout(
-		IDWriteTextLayout* textLayout,
-		const RectF& rect
-	)
-	{
-		if (textLayout == NULL)
-			return;
-
-		Context context(this, NULL);
-		textLayout->Draw(
-			&context,
-			this,
-			rect.left,
-			rect.top
-		);
-	}
-
-	virtual void DrawImage(
-		IWICBitmapSource* image,
-		const RectF& sourceRect,  // where in source atlas texture
-		const RectF& destRect     // where on display to draw it
-	)
-	{}
-
-	void FillRectangle(
-		const RectF& destRect,
-		const DrawingEffect& drawingEffect
-	)
-	{
-		ID2D1Brush* brush = GetCachedBrush(&drawingEffect);
-		if (brush == NULL)
-			return;
-
-		// We will always get a strikethrough as a LTR rectangle
-		// with the baseline origin snapped.
-		target_->FillRectangle(destRect, brush);
-	}
-
-	// IDWriteTextRenderer implementation
-
-	IFACEMETHOD(DrawGlyphRun)(
-		void* clientDrawingContext,
-		FLOAT baselineOriginX,
-		FLOAT baselineOriginY,
-		DWRITE_MEASURING_MODE measuringMode,
-		const DWRITE_GLYPH_RUN* glyphRun,
-		const DWRITE_GLYPH_RUN_DESCRIPTION* glyphRunDescription,
-		IUnknown* clientDrawingEffect
-		)
-	{
-		// If no drawing effect is applied to run, but a clientDrawingContext
-		// is passed, use the one from that instead. This is useful for trimming
-		// signs, where they don't have a color of their own.
-		clientDrawingEffect = GetDrawingEffect(clientDrawingContext, clientDrawingEffect);
-
-		// Since we use our own custom renderer and explicitly set the effect
-		// on the layout, we know exactly what the parameter is and can
-		// safely cast it directly.
-		DrawingEffect* effect = static_cast<DrawingEffect*>(clientDrawingEffect);
-		ID2D1Brush* brush = GetCachedBrush(effect);
-		if (brush == NULL)
-			return E_FAIL;
-
-		target_->DrawGlyphRun(
-			D2D1::Point2(baselineOriginX, baselineOriginY),
-			glyphRun,
-			brush,
-			measuringMode
-		);
-
-		return S_OK;
-	}
-
-	IFACEMETHOD(DrawUnderline)(
-		void* clientDrawingContext,
-		FLOAT baselineOriginX,
-		FLOAT baselineOriginY,
-		const DWRITE_UNDERLINE* underline,
-		IUnknown* clientDrawingEffect
-		)
-	{
-		clientDrawingEffect = GetDrawingEffect(clientDrawingContext, clientDrawingEffect);
-
-		DrawingEffect* effect = static_cast<DrawingEffect*>(clientDrawingEffect);
-		ID2D1Brush* brush = GetCachedBrush(effect);
-		if (brush == NULL)
-			return E_FAIL;
-
-		// We will always get a strikethrough as a LTR rectangle
-		// with the baseline origin snapped.
-		D2D1_RECT_F rectangle =
-		{
-			baselineOriginX,
-			baselineOriginY + underline->offset,
-			baselineOriginX + underline->width,
-			baselineOriginY + underline->offset + underline->thickness
-		};
-
-		// Draw this as a rectangle, rather than a line.
-		target_->FillRectangle(&rectangle, brush);
-
-		return S_OK;
-	}
-
-	IFACEMETHOD(DrawStrikethrough)(
-		void* clientDrawingContext,
-		FLOAT baselineOriginX,
-		FLOAT baselineOriginY,
-		const DWRITE_STRIKETHROUGH* strikethrough,
-		IUnknown* clientDrawingEffect
-		)
-	{
-		clientDrawingEffect = GetDrawingEffect(clientDrawingContext, clientDrawingEffect);
-
-		DrawingEffect* effect = static_cast<DrawingEffect*>(clientDrawingEffect);
-		ID2D1Brush* brush = GetCachedBrush(effect);
-		if (brush == NULL)
-			return E_FAIL;
-
-		// We will always get an underline as a LTR rectangle
-		// with the baseline origin snapped.
-		D2D1_RECT_F rectangle =
-		{
-			baselineOriginX,
-			baselineOriginY + strikethrough->offset,
-			baselineOriginX + strikethrough->width,
-			baselineOriginY + strikethrough->offset + strikethrough->thickness
-		};
-
-		// Draw this as a rectangle, rather than a line.
-		target_->FillRectangle(&rectangle, brush);
-
-		return S_OK;
-	}
-
-	IFACEMETHOD(DrawInlineObject)(
-		void* clientDrawingContext,
-		FLOAT originX,
-		FLOAT originY,
-		IDWriteInlineObject* inlineObject,
-		BOOL isSideways,
-		BOOL isRightToLeft,
-		IUnknown* clientDrawingEffect
-		)
-	{
-		// Inline objects inherit the drawing effect of the text
-		// they are in, so we should pass it down (if none is set
-		// on this range, use the drawing context's effect instead).
-		Context subContext(*reinterpret_cast<RenderTarget::Context*>(clientDrawingContext));
-
-		if (clientDrawingEffect != NULL)
-			subContext.drawingEffect = clientDrawingEffect;
-
-		inlineObject->Draw(
-			&subContext,
-			this,
-			originX,
-			originY,
-			false,
-			false,
-			subContext.drawingEffect
-		);
-
-		return S_OK;
-	}
-
-	IFACEMETHOD(IsPixelSnappingDisabled)(
-		void* clientDrawingContext,
-		OUT BOOL* isDisabled
-		)
-	{
-		// Enable pixel snapping of the text baselines,
-		// since we're not animating and don't want blurry text.
-		*isDisabled = FALSE;
-		return S_OK;
-	}
-
-	IFACEMETHOD(GetCurrentTransform)(
-		void* clientDrawingContext,
-		OUT DWRITE_MATRIX* transform
-		)
-	{
-		// Simply forward what the real renderer holds onto.
-		target_->GetTransform(reinterpret_cast<D2D1_MATRIX_3X2_F*>(transform));
-		return S_OK;
-	}
-
-	IFACEMETHOD(GetPixelsPerDip)(
-		void* clientDrawingContext,
-		OUT FLOAT* pixelsPerDip
-		)
-	{
-		// Any scaling will be combined into matrix transforms rather than an
-		// additional DPI scaling. This simplifies the logic for rendering
-		// and hit-testing. If an application does not use matrices, then
-		// using the scaling factor directly is simpler.
-		*pixelsPerDip = 1;
-		return S_OK;
-	}
-
-public:
-#if 0
-	// For cached images, to avoid needing to recreate the textures each draw call.
-	struct ImageCacheEntry
-	{
-		ImageCacheEntry(IWICBitmapSource* initialOriginal, ID2D1Bitmap* initialConverted)
-			: original(SafeAcquire(initialOriginal)),
-			converted(SafeAcquire(initialConverted))
-		{ }
-
-		ImageCacheEntry(const ImageCacheEntry& b)
-		{
-			original = SafeAcquire(b.original);
-			converted = SafeAcquire(b.converted);
-		}
-
-		ImageCacheEntry& operator=(const ImageCacheEntry& b)
-		{
-			if (this != &b)
-			{
-				// Define assignment operator in terms of destructor and
-				// placement new constructor, paying heed to self assignment.
-				this->~ImageCacheEntry();
-				new(this) ImageCacheEntry(b);
-			}
-			return *this;
-		}
-
-		~ImageCacheEntry()
-		{
-			SafeRelease(&original);
-			SafeRelease(&converted);
-		}
-
-		IWICBitmapSource* original;
-		ID2D1Bitmap* converted;
-	};
-#endif
-protected:
-	D2D1_SIZE_U GetSizeUFromRect(const RECT& rc, const int scaleFactor) noexcept
-	{
-		const long width = rc.right - rc.left;
-		const long height = rc.bottom - rc.top;
-		const UINT32 scaledWidth = width * scaleFactor;
-		const UINT32 scaledHeight = height * scaleFactor;
-		return D2D1::SizeU(scaledWidth, scaledHeight);
-	}
-
-	HRESULT CreateTarget()
-	{
-		// Creates a D2D render target set on the HWND.
-		HRESULT hr = S_OK;
-		// Get the window's pixel size.
-		RECT rect = {};
-		GetClientRect(hwnd_, &rect);
-		D2D1_SIZE_U d2dSize = D2D1::SizeU(rect.right, rect.bottom);
-
-		const int integralDeviceScaleFactor = 1.f;
-		D2D1_RENDER_TARGET_PROPERTIES drtp{};
-		drtp.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-		drtp.usage = D2D1_RENDER_TARGET_USAGE_NONE;
-		drtp.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
-		drtp.dpiX = 96.f * integralDeviceScaleFactor;
-		drtp.dpiY = 96.f * integralDeviceScaleFactor;
-		// drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN);
-		drtp.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_IGNORE);
-
-		D2D1_HWND_RENDER_TARGET_PROPERTIES dhrtp{};
-		dhrtp.hwnd = hwnd_;
-		dhrtp.pixelSize = GetSizeUFromRect(rect, integralDeviceScaleFactor);
-		dhrtp.presentOptions = D2D1_PRESENT_OPTIONS_NONE;
-
-		// Create a D2D render target.
-		ID2D1HwndRenderTarget* target = NULL;
-		hr = d2dFactory_->CreateHwndRenderTarget(drtp, dhrtp, &target);
-#if 0
-		hr = d2dFactory_->CreateHwndRenderTarget(
-			D2D1::RenderTargetProperties(),
-			D2D1::HwndRenderTargetProperties(hwnd_, d2dSize),
-			&target
-		);
-#endif 
-		if (SUCCEEDED(hr))
-		{
-			SafeSet(&target_, target);
-
-			// Any scaling will be combined into matrix transforms rather than an
-			// additional DPI scaling. This simplifies the logic for rendering
-			// and hit-testing. If an application does not use matrices, then
-			// using the scaling factor directly is simpler.
-			target->SetDpi(96.0, 96.0);
-
-			// Create a reusable scratch brush, rather than allocating one for
-			// each new color.
-			SafeRelease(&brush_);
-			//hr = target->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &brush_);
-			hr = target->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &brush_);
-		}
-
-		if (SUCCEEDED(hr))
-		{
-			// Update the initial monitor rendering parameters.
-			UpdateMonitor();
-		}
-
-		SafeRelease(&target);
-
-		return hr;
-	}
-#if 0
-	ID2D1Bitmap* GetCachedImage(IWICBitmapSource* image);
-#endif 
-	ID2D1Brush* GetCachedBrush(const DrawingEffect* effect)
-	{
-		if (effect == NULL || brush_ == NULL)
-			return NULL;
-		// Update the D2D brush to the new effect color.
-		UINT32 bgra = effect->GetColor();
-		float alpha = (bgra >> 24) / 255.0f;
-		brush_->SetColor(D2D1::ColorF(bgra, alpha));
-		return brush_;
-	}
-
-protected:
-	IDWriteFactory* dwriteFactory_ = nullptr;
-	ID2D1Factory* d2dFactory_ = nullptr;
-	ID2D1HwndRenderTarget* target_ = nullptr;     // D2D render target
-	ID2D1SolidColorBrush* brush_ = nullptr;       // reusable scratch brush for current color
-
-	//std::vector<ImageCacheEntry> imageCache_;
-
-	HWND hwnd_;
-	HMONITOR hmonitor_;
-};
-#endif 
 
 // look for "https://"
 bool IsLinkText(WCHAR* data, U32 length, U32 pos, U32& startPos, U32& endPos)
@@ -783,39 +60,27 @@ bool IsLinkText(WCHAR* data, U32 length, U32 pos, U32& startPos, U32& endPos)
 	return bRet;
 }
 
-#define DECLARE_WND_CLASS_TEXT(WndClassName) \
-static ATL::CWndClassInfo& GetWndClassInfo() \
-{ \
-	static ATL::CWndClassInfo wc = \
-	{ \
-		{ sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS, StartWindowProc, \
-		  0, 0, NULL, NULL, NULL, (HBRUSH)(COLOR_WINDOW + 1), NULL, WndClassName, NULL }, \
-		NULL, NULL, IDC_IBEAM, TRUE, 0, _T("") \
-	}; \
-	return wc; \
-}
+enum SetSelectionMode
+{
+	SetSelectionModeLeft,               // cluster left
+	SetSelectionModeRight,              // cluster right
+	SetSelectionModeUp,                 // line up
+	SetSelectionModeDown,               // line down
+	SetSelectionModeLeftChar,           // single character left (backspace uses it)
+	SetSelectionModeRightChar,          // single character right
+	SetSelectionModeLeftWord,           // single word left
+	SetSelectionModeRightWord,          // single word right
+	SetSelectionModeHome,               // front of line
+	SetSelectionModeEnd,                // back of line
+	SetSelectionModeFirst,              // very first position
+	SetSelectionModeLast,               // very last position
+	SetSelectionModeAbsoluteLeading,    // explicit position (for mouse click)
+	SetSelectionModeAbsoluteTrailing,   // explicit position, trailing edge
+	SetSelectionModeAll                 // select all text
+};
 
 class CTxtView : public CScrollWindowImpl<CTxtView>
 {
-	enum SetSelectionMode
-	{
-		SetSelectionModeLeft,               // cluster left
-		SetSelectionModeRight,              // cluster right
-		SetSelectionModeUp,                 // line up
-		SetSelectionModeDown,               // line down
-		SetSelectionModeLeftChar,           // single character left (backspace uses it)
-		SetSelectionModeRightChar,          // single character right
-		SetSelectionModeLeftWord,           // single word left
-		SetSelectionModeRightWord,          // single word right
-		SetSelectionModeHome,               // front of line
-		SetSelectionModeEnd,                // back of line
-		SetSelectionModeFirst,              // very first position
-		SetSelectionModeLast,               // very last position
-		SetSelectionModeAbsoluteLeading,    // explicit position (for mouse click)
-		SetSelectionModeAbsoluteTrailing,   // explicit position, trailing edge
-		SetSelectionModeAll                 // select all text
-	};
-
 	////////////////////
 	// Selection/Caret navigation
 	///
@@ -916,41 +181,6 @@ public:
 		return FALSE;
 	}
 
-	HRESULT CreateRenderTarget()
-	{
-		HRESULT hr = S_OK;
-#if 0
-		RenderTarget* renderTarget = NULL;
-		ATLASSERT(d2dFactory_ != NULL);
-		ATLASSERT(dwriteFactory_ != NULL);
-		hr = RenderTargetD2D::Create(d2dFactory_, dwriteFactory_, m_hWnd, &renderTarget);
-		// Set the new target.
-		if (SUCCEEDED(hr))
-		{
-			SafeSet(&renderTarget_, renderTarget);
-		}
-		SafeRelease(&renderTarget);
-#endif 
-		return hr;
-	}
-
-#if 0
-	void DrawPage(RenderTarget& target)
-	{
-		if (m_textLayout)
-		{
-			RECT rc;
-			GetClientRect(&rc);
-			RectF rf = {
-				static_cast<float>(rc.left),
-				static_cast<float>(rc.top),
-				static_cast<float>(rc.right),
-				static_cast<float>(rc.bottom)
-			};
-			target.DrawTextLayout(m_textLayout, rf);
-		}
-	}
-#endif 
 	int GetFirstIntegralMultipleDeviceScaleFactor() const noexcept
 	{
 		return static_cast<int>(std::ceil(m_deviceScaleFactor));
@@ -1033,6 +263,7 @@ public:
 
 	void DoPaint(CDCHandle dc)
 	{
+#if 10
 		POINT pt = { 0 };
 		RECT rc = { 0 };
 		GetClientRect(&rc);
@@ -1109,15 +340,6 @@ public:
 				ReleaseUnknown(m_pD2DRenderTarget);
 			}
 		}
-
-#if 0
-		if (renderTarget_ != NULL) // in case event received before we have a target
-		{
-			renderTarget_->BeginDraw();
-			renderTarget_->Clear(D2D1::ColorF::LightGray);
-			DrawPage(*renderTarget_);
-			renderTarget_->EndDraw();
-		}
 #endif 
 	}
 
@@ -1136,10 +358,6 @@ public:
 		CHAIN_MSG_MAP(CScrollWindowImpl<CTxtView>)
 	END_MSG_MAP()
 
-// Handler prototypes (uncomment arguments if needed):
-//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
-//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
 	LRESULT OnEraseBackground(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		// handled, no background painting needed
@@ -1156,6 +374,7 @@ public:
 		ReleaseUnknown(m_pixelBitmap);
 		ReleaseUnknown(m_pD2DRenderTarget);
 #endif 
+		//bHandled = FALSE;
 		return 0;
 	}
 
@@ -1186,25 +405,15 @@ public:
 		{
 			RECT rc = { 0 };
 			GetClientRect(&rc);
-
 			ReleaseUnknown(m_textLayout);
-			ATLASSERT(m_textFormat);
-			if (m_dataLen && m_dataBuf)
+			if (m_dataLen && m_dataBuf && m_textFormat)
 			{
 				dwriteFactory_->CreateTextLayout(m_dataBuf, m_dataLen, m_textFormat,
 					static_cast<FLOAT>(rc.right - rc.left),
 					static_cast<FLOAT>(rc.bottom - rc.top),
 					&m_textLayout);
 				MakeLinkTextUnderline();
-#if 0
-				if (m_textLayout)
-				{
-					DWRITE_TEXT_RANGE tr = { 22, 17 };
-					m_textLayout->SetUnderline(TRUE, tr);
-				}
-#endif 
 			}
-
 			ReleaseUnknown(m_pD2DRenderTarget);
 			Invalidate();
 		}
@@ -1213,6 +422,7 @@ public:
 
 	LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
+#if 10
 		POINT pt = { 0 };
 		GetScrollOffset(pt);
 
@@ -1261,11 +471,11 @@ public:
 #endif 
 			}
 		}
-
-		return 1;
+#endif
+		return 0;
 	}
 
-	LRESULT OnSetCursor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnSetCursor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		if (m_CursorChanged == false)
 		{
@@ -1275,31 +485,31 @@ public:
 		return 0;
 	}
 
-	LRESULT OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		return 1;
 	}
 
-	LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		return 1;
 	}
 
-	LRESULT OnMouseHover(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnMouseHover(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		return 1;
 	}
 
-	LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		return 1;
 	}
 
-	LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		float xPos = static_cast<float>(GET_X_LPARAM(lParam));
 		float yPos = static_cast<float>(GET_Y_LPARAM(lParam));
-
+#if 10
 		m_CursorChanged = false;
 		if (m_textLayout)
 		{
@@ -1328,12 +538,14 @@ public:
 				}
 			}
 		}
-		return 1;
+#endif 
+		return 0;
 	}
 
 	int AppendText(const char* text, U32 length)
 	{
 		int r = 0;
+#if 10
 		if (text && length && m_dataBuf)
 		{
 			U32 utf16len = 0;
@@ -1357,6 +569,7 @@ public:
 					&m_textLayout);
 
 				MakeLinkTextUnderline();
+
 				if (m_textLayout)
 				{
 					int hI;
@@ -1367,20 +580,13 @@ public:
 						hf = textMetrics.height;
 
 					hI = static_cast<int>(hf + 1);
-					if(hI > rc.bottom - rc.top)
+					if (hI > rc.bottom - rc.top)
 						SetScrollSize(1, hI);
-#if 0
-					DrawingEffect* drawingEffect1 = SafeAcquire(new(std::nothrow) DrawingEffect(0xFF1010D0));
-					DrawingEffect* drawingEffect2 = SafeAcquire(new(std::nothrow) DrawingEffect(0xFF10D010));
-					m_textLayout->SetDrawingEffect(drawingEffect1, MakeDWriteTextRange(0, 3));
-					m_textLayout->SetDrawingEffect(drawingEffect2, MakeDWriteTextRange(3, 6));
-					SafeRelease(&drawingEffect2);
-					SafeRelease(&drawingEffect1);
-#endif 
 				}
 				Invalidate();
 			}
 		}
+#endif 
 		return r;
 	}
 
@@ -1421,36 +627,4 @@ public:
 			}
 		}
 	}
-};
-#endif 
-
-class CTxtView : public CScrollWindowImpl<CTxtView>
-{
-public:
-	DECLARE_WND_CLASS(NULL)
-
-		BOOL PreTranslateMessage(MSG* pMsg)
-	{
-		pMsg;
-		return FALSE;
-	}
-
-	void DoPaint(CDCHandle dc)
-	{
-		//TODO: Add your drawing code here
-	}
-
-	int AppendText(const char* text, U32 length)
-	{
-		return 0;
-	}
-
-	BEGIN_MSG_MAP(CTxtView)
-		CHAIN_MSG_MAP(CScrollWindowImpl<CTxtView>)
-	END_MSG_MAP()
-
-	// Handler prototypes (uncomment arguments if needed):
-	//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
-	//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-	//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
 };
