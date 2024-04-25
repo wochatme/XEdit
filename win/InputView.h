@@ -179,4 +179,46 @@ public:
 		return ch;
 	}
 
+	bool DoEditCopy()
+	{
+		bool bRet = false;
+		if (IsWindow())
+		{
+			bool bNoSelection = (bool)::SendMessage(m_hWnd, SCI_GETSELECTIONEMPTY, 0, 0);
+			if (bNoSelection == false)
+			{
+				::SendMessage(m_hWnd, SCI_COPY, 0, 0);
+				bRet = true;
+			}
+		}
+		return bRet;
+	}
+
+	bool DoEditPaste()
+	{
+		if (IsWindow())
+		{
+			::SendMessage(m_hWnd, SCI_PASTE, 0, 0);
+		}
+		return true;
+	}
+
+	bool DoEditCut()
+	{
+		if (IsWindow())
+		{
+			::SendMessage(m_hWnd, SCI_CUT, 0, 0);
+		}
+		return true;
+	}
+
+	bool DoEditUndo()
+	{
+		if (IsWindow())
+		{
+			::SendMessage(m_hWnd, SCI_UNDO, 0, 0);
+		}
+		return true;
+	}
+
 };

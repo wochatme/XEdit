@@ -169,4 +169,9 @@ public:
 		return ch;
 	}
 
+	bool DoEditCopy()
+	{
+		return true;
+	}
+
 };

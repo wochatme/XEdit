@@ -566,7 +566,7 @@ public:
 		m_workView.sci_SetCodePage(SC_CP_UTF8);
 		m_workView.sci_SetEOLMode(SC_EOL_LF);
 		m_workView.sci_SetWrapMode(SC_WRAP_WORD);
-		m_workView.sci_StyleSetFont(STYLE_DEFAULT, "Courier New");
+		m_workView.sci_StyleSetFont(STYLE_DEFAULT, "Microsoft Yahei UI");
 		m_workView.sci_StyleSetFontSize(STYLE_DEFAULT, 11);
 
 		m_inputView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
@@ -1359,4 +1359,41 @@ public:
 		}
 		return 1;
 	}
+
+	int DoEditCopy()
+	{
+		bool bCopy = false;
+		if (m_txtView.IsWindow())
+		{
+			bCopy = m_txtView.DoEditCopy();
+			if (bCopy == false)
+			{
+				bCopy = m_inputView.DoEditCopy();
+				if (bCopy == false)
+				{
+					bCopy = m_workView.DoEditCopy();
+				}
+			}
+		}
+		return 0;
+	}
+
+	int DoEditPaste()
+	{
+		m_inputView.DoEditPaste();
+		return 0;
+	}
+
+	int DoEditCut()
+	{
+		m_inputView.DoEditCut();
+		return 0;
+	}
+
+	int DoEditUndo()
+	{
+		m_inputView.DoEditUndo();
+		return 0;
+	}
+
 };

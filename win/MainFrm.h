@@ -37,6 +37,10 @@ public:
 	BEGIN_MSG_MAP(CMainFrame)
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+		COMMAND_ID_HANDLER(ID_EDIT_COPY, OnEditCopy)
+		COMMAND_ID_HANDLER(ID_EDIT_PASTE, OnEditPaste)
+		COMMAND_ID_HANDLER(ID_EDIT_CUT, OnEditCut)
+		COMMAND_ID_HANDLER(ID_EDIT_UNDO, OnEditUndo)
 		COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
 		COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
@@ -140,4 +144,36 @@ public:
 		dlg.DoModal();
 		return 0;
 	}
+	LRESULT OnEditCopy(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		ATLASSERT(m_view.IsWindow());
+		if(m_view.IsWindow())
+			m_view.DoEditCopy();
+		return 0;
+	}
+
+	LRESULT OnEditPaste(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		ATLASSERT(m_view.IsWindow());
+		if (m_view.IsWindow())
+			m_view.DoEditPaste();
+		return 0;
+	}
+
+	LRESULT OnEditCut(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		ATLASSERT(m_view.IsWindow());
+		if (m_view.IsWindow())
+			m_view.DoEditCut();
+		return 0;
+	}
+
+	LRESULT OnEditUndo(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		ATLASSERT(m_view.IsWindow());
+		if (m_view.IsWindow())
+			m_view.DoEditUndo();
+		return 0;
+	}
+
 };

@@ -5,6 +5,7 @@
 #pragma once
 
 WCHAR title[MAX_PATH + 1] = { 0 };
+
 #define DECLARE_WND_CLASS_TEXT(WndClassName) \
 static ATL::CWndClassInfo& GetWndClassInfo() \
 { \
@@ -15,49 +16,6 @@ static ATL::CWndClassInfo& GetWndClassInfo() \
 		NULL, NULL, IDC_IBEAM, TRUE, 0, _T("") \
 	}; \
 	return wc; \
-}
-
-inline D2D1::Matrix3x2F& Cast(DWRITE_MATRIX& matrix)
-{
-	// DWrite's matrix, D2D's matrix, and GDI's XFORM
-	// are all compatible.
-	return *reinterpret_cast<D2D1::Matrix3x2F*>(&matrix);
-}
-
-inline DWRITE_MATRIX& Cast(D2D1::Matrix3x2F& matrix)
-{
-	return *reinterpret_cast<DWRITE_MATRIX*>(&matrix);
-}
-
-#ifndef M_PI
-// No M_PI in math.h on windows? No problem.
-#define M_PI 3.14159265358979323846
-#endif
-
-inline double DegreesToRadians(float degrees)
-{
-	return degrees * M_PI * 2.0f / 360.0f;
-}
-
-inline float GetDeterminant(DWRITE_MATRIX const& matrix)
-{
-	return matrix.m11 * matrix.m22 - matrix.m12 * matrix.m21;
-}
-
-void ComputeInverseMatrix(
-	DWRITE_MATRIX const& matrix,
-	OUT DWRITE_MATRIX& result
-)
-{
-	// Used for hit-testing, mouse scrolling, panning, and scroll bar sizing.
-
-	float invdet = 1.f / GetDeterminant(matrix);
-	result.m11 = matrix.m22 * invdet;
-	result.m12 = -matrix.m12 * invdet;
-	result.m21 = -matrix.m21 * invdet;
-	result.m22 = matrix.m11 * invdet;
-	result.dx = (matrix.m21 * matrix.dy - matrix.dx * matrix.m22) * invdet;
-	result.dy = (matrix.dx * matrix.m12 - matrix.m11 * matrix.dy) * invdet;
 }
 
 // look for "https://"
@@ -287,11 +245,6 @@ public:
 	{
 		// Returns a valid range of the current selection,
 		// regardless of whether the caret or anchor is first.
-#if 0
-		caretAnchor_ = 130;
-		caretPosition_ = 250;
-		caretPositionOffset_ = 0;
-#endif 
 		UINT32 caretBegin = caretAnchor_;
 		UINT32 caretEnd = caretPosition_ + caretPositionOffset_;
 		if (caretBegin > caretEnd)
@@ -308,7 +261,6 @@ public:
 
 	void DoPaint(CDCHandle dc)
 	{
-#if 10
 		POINT pt = { 0 };
 		RECT rc = { 0 };
 		GetClientRect(&rc);
@@ -385,7 +337,6 @@ public:
 				ReleaseUnknown(m_pD2DRenderTarget);
 			}
 		}
-#endif 
 	}
 
 	BEGIN_MSG_MAP(CTxtView)
@@ -519,8 +470,6 @@ public:
 			}
 		}
 
-		//MirrorXCoordinate(x);
-
 		if (currentlySelecting_)
 		{
 			// Drag current selection.
@@ -536,24 +485,6 @@ public:
 				Invalidate();
 			}
 		}
-		else if (currentlyPanning_)
-		{
-			DWRITE_MATRIX matrix;
-			GetInverseViewMatrix(&matrix);
-
-			float xDif = xPos - previousMouseX;
-			float yDif = yPos - previousMouseY;
-			previousMouseX = xPos;
-			previousMouseY = yPos;
-
-			originX_ -= (xDif * matrix.m11 + yDif * matrix.m21);
-			originY_ -= (xDif * matrix.m12 + yDif * matrix.m22);
-			//ConstrainViewOrigin();
-
-			//RefreshView();
-			Invalidate();
-		}
-
 		return 0;
 	}
 
@@ -734,464 +665,8 @@ public:
 		}
 	}
 
-	void AlignCaretToNearestCluster(bool isTrailingHit = false, bool skipZeroWidth = false)
+	bool DoEditCopy()
 	{
-		// Uses hit-testing to align the current caret position to a whole cluster,
-		// rather than residing in the middle of a base character + diacritic,
-		// surrogate pair, or character + UVS.
-
-		DWRITE_HIT_TEST_METRICS hitTestMetrics;
-		float caretX, caretY;
-
-		// Align the caret to the nearest whole cluster.
-		m_textLayout->HitTestTextPosition(
-			caretPosition_,
-			false,
-			&caretX,
-			&caretY,
-			&hitTestMetrics
-		);
-
-		// The caret position itself is always the leading edge.
-		// An additional offset indicates a trailing edge when non-zero.
-		// This offset comes from the number of code-units in the
-		// selected cluster or surrogate pair.
-		caretPosition_ = hitTestMetrics.textPosition;
-		caretPositionOffset_ = (isTrailingHit) ? hitTestMetrics.length : 0;
-
-		// For invisible, zero-width characters (like line breaks
-		// and formatting characters), force leading edge of the
-		// next position.
-		if (skipZeroWidth && hitTestMetrics.width == 0)
-		{
-			caretPosition_ += caretPositionOffset_;
-			caretPositionOffset_ = 0;
-		}
-	}
-
-	void GetLineFromPosition(
-		const DWRITE_LINE_METRICS* lineMetrics, // [lineCount]
-		UINT32 lineCount,
-		UINT32 textPosition,
-		OUT UINT32* lineOut,
-		OUT UINT32* linePositionOut
-	)
-	{
-		// Given the line metrics, determines the current line and starting text
-		// position of that line by summing up the lengths. When the starting
-		// line position is beyond the given text position, we have our line.
-
-		UINT32 line = 0;
-		UINT32 linePosition = 0;
-		UINT32 nextLinePosition = 0;
-		for (; line < lineCount; ++line)
-		{
-			linePosition = nextLinePosition;
-			nextLinePosition = linePosition + lineMetrics[line].length;
-			if (nextLinePosition > textPosition)
-			{
-				// The next line is beyond the desired text position,
-				// so it must be in the current line.
-				break;
-			}
-		}
-		*linePositionOut = linePosition;
-		*lineOut = std::min(line, lineCount - 1);
-		return;
-	}
-
-	void GetLineMetrics(
-		OUT std::vector<DWRITE_LINE_METRICS>& lineMetrics
-	)
-	{
-		// Retrieves the line metrics, used for caret navigation, up/down and home/end.
-
-		DWRITE_TEXT_METRICS textMetrics;
-		m_textLayout->GetMetrics(&textMetrics);
-
-		lineMetrics.resize(textMetrics.lineCount);
-		m_textLayout->GetLineMetrics(&lineMetrics.front(), textMetrics.lineCount, &textMetrics.lineCount);
-	}
-
-	bool SetSelection(SetSelectionMode moveMode, UINT32 advance, bool extendSelection, bool updateCaretFormat = true)
-	{
-		// Moves the caret relatively or absolutely, optionally extending the
-		// selection range (for example, when shift is held).
-		UINT32 line = UINT32_MAX; // current line number, needed by a few modes
-		UINT32 absolutePosition = caretPosition_ + caretPositionOffset_;
-		UINT32 oldAbsolutePosition = absolutePosition;
-		UINT32 oldCaretAnchor = caretAnchor_;
-
-		switch (moveMode)
-		{
-		case SetSelectionModeLeft:
-			caretPosition_ += caretPositionOffset_;
-			if (caretPosition_ > 0)
-			{
-				--caretPosition_;
-				AlignCaretToNearestCluster(false, true);
-
-				// special check for CR/LF pair
-				absolutePosition = caretPosition_ + caretPositionOffset_;
-				if (absolutePosition >= 1
-					&& absolutePosition < m_dataLen
-					&& m_dataBuf[absolutePosition - 1] == '\r'
-					&& m_dataBuf[absolutePosition] == '\n')
-				{
-					caretPosition_ = absolutePosition - 1;
-					AlignCaretToNearestCluster(false, true);
-				}
-			}
-			break;
-
-		case SetSelectionModeRight:
-			caretPosition_ = absolutePosition;
-			AlignCaretToNearestCluster(true, true);
-
-			// special check for CR/LF pair
-			absolutePosition = caretPosition_ + caretPositionOffset_;
-			if (absolutePosition >= 1
-				&& absolutePosition < m_dataLen
-				&& m_dataBuf[absolutePosition - 1] == '\r'
-				&& m_dataBuf[absolutePosition] == '\n')
-			{
-				caretPosition_ = absolutePosition + 1;
-				AlignCaretToNearestCluster(false, true);
-			}
-			break;
-
-		case SetSelectionModeLeftChar:
-			caretPosition_ = absolutePosition;
-			caretPosition_ -= std::min(advance, absolutePosition);
-			caretPositionOffset_ = 0;
-			break;
-
-		case SetSelectionModeRightChar:
-			caretPosition_ = absolutePosition + advance;
-			caretPositionOffset_ = 0;
-			{
-				// Use hit-testing to limit text position.
-				DWRITE_HIT_TEST_METRICS hitTestMetrics;
-				float caretX, caretY;
-
-				m_textLayout->HitTestTextPosition(
-					caretPosition_,
-					false,
-					&caretX,
-					&caretY,
-					&hitTestMetrics
-				);
-				caretPosition_ = std::min(caretPosition_, hitTestMetrics.textPosition + hitTestMetrics.length);
-			}
-			break;
-
-		case SetSelectionModeUp:
-		case SetSelectionModeDown:
-		{
-			// Retrieve the line metrics to figure out what line we are on.
-			std::vector<DWRITE_LINE_METRICS> lineMetrics;
-			GetLineMetrics(lineMetrics);
-
-			UINT32 linePosition;
-			GetLineFromPosition(
-				&lineMetrics.front(),
-				static_cast<UINT32>(lineMetrics.size()),
-				caretPosition_,
-				&line,
-				&linePosition
-			);
-
-			// Move up a line or down
-			if (moveMode == SetSelectionModeUp)
-			{
-				if (line <= 0)
-					break; // already top line
-				line--;
-				linePosition -= lineMetrics[line].length;
-			}
-			else
-			{
-				linePosition += lineMetrics[line].length;
-				line++;
-				if (line >= lineMetrics.size())
-					break; // already bottom line
-			}
-
-			// To move up or down, we need three hit-testing calls to determine:
-			// 1. The x of where we currently are.
-			// 2. The y of the new line.
-			// 3. New text position from the determined x and y.
-			// This is because the characters are variable size.
-
-			DWRITE_HIT_TEST_METRICS hitTestMetrics;
-			float caretX, caretY, dummyX;
-
-			// Get x of current text position
-			m_textLayout->HitTestTextPosition(
-				caretPosition_,
-				caretPositionOffset_ > 0, // trailing if nonzero, else leading edge
-				&caretX,
-				&caretY,
-				&hitTestMetrics
-			);
-
-			// Get y of new position
-			m_textLayout->HitTestTextPosition(
-				linePosition,
-				false, // leading edge
-				&dummyX,
-				&caretY,
-				&hitTestMetrics
-			);
-
-			// Now get text position of new x,y.
-			BOOL isInside, isTrailingHit;
-			m_textLayout->HitTestPoint(
-				caretX,
-				caretY,
-				&isTrailingHit,
-				&isInside,
-				&hitTestMetrics
-			);
-
-			caretPosition_ = hitTestMetrics.textPosition;
-			caretPositionOffset_ = isTrailingHit ? (hitTestMetrics.length > 0) : 0;
-		}
-		break;
-
-		case SetSelectionModeLeftWord:
-		case SetSelectionModeRightWord:
-		{
-			// To navigate by whole words, we look for the canWrapLineAfter
-			// flag in the cluster metrics.
-
-			// First need to know how many clusters there are.
-			std::vector<DWRITE_CLUSTER_METRICS> clusterMetrics;
-			UINT32 clusterCount;
-			m_textLayout->GetClusterMetrics(NULL, 0, &clusterCount);
-
-			if (clusterCount == 0)
-				break;
-
-			// Now we actually read them.
-			clusterMetrics.resize(clusterCount);
-			m_textLayout->GetClusterMetrics(&clusterMetrics.front(), clusterCount, &clusterCount);
-
-			caretPosition_ = absolutePosition;
-
-			UINT32 clusterPosition = 0;
-			UINT32 oldCaretPosition = caretPosition_;
-
-			if (moveMode == SetSelectionModeLeftWord)
-			{
-				// Read through the clusters, keeping track of the farthest valid
-				// stopping point just before the old position.
-				caretPosition_ = 0;
-				caretPositionOffset_ = 0; // leading edge
-				for (UINT32 cluster = 0; cluster < clusterCount; ++cluster)
-				{
-					clusterPosition += clusterMetrics[cluster].length;
-					if (clusterMetrics[cluster].canWrapLineAfter)
-					{
-						if (clusterPosition >= oldCaretPosition)
-							break;
-
-						// Update in case we pass this point next loop.
-						caretPosition_ = clusterPosition;
-					}
-				}
-			}
-			else // SetSelectionModeRightWord
-			{
-				// Read through the clusters, looking for the first stopping point
-				// after the old position.
-				for (UINT32 cluster = 0; cluster < clusterCount; ++cluster)
-				{
-					UINT32 clusterLength = clusterMetrics[cluster].length;
-					caretPosition_ = clusterPosition;
-					caretPositionOffset_ = clusterLength; // trailing edge
-					if (clusterPosition >= oldCaretPosition && clusterMetrics[cluster].canWrapLineAfter)
-						break; // first stopping point after old position.
-
-					clusterPosition += clusterLength;
-				}
-			}
-		}
-		break;
-
-		case SetSelectionModeHome:
-		case SetSelectionModeEnd:
-		{
-			// Retrieve the line metrics to know first and last position
-			// on the current line.
-			std::vector<DWRITE_LINE_METRICS> lineMetrics;
-			GetLineMetrics(lineMetrics);
-
-			GetLineFromPosition(
-				&lineMetrics.front(),
-				static_cast<UINT32>(lineMetrics.size()),
-				caretPosition_,
-				&line,
-				&caretPosition_
-			);
-
-			caretPositionOffset_ = 0;
-			if (moveMode == SetSelectionModeEnd)
-			{
-				// Place the caret at the last character on the line,
-				// excluding line breaks. In the case of wrapped lines,
-				// newlineLength will be 0.
-				UINT32 lineLength = lineMetrics[line].length - lineMetrics[line].newlineLength;
-				caretPositionOffset_ = std::min(lineLength, 1u);
-				caretPosition_ += lineLength - caretPositionOffset_;
-				AlignCaretToNearestCluster(true);
-			}
-		}
-		break;
-
-		case SetSelectionModeFirst:
-			caretPosition_ = 0;
-			caretPositionOffset_ = 0;
-			break;
-
-		case SetSelectionModeAll:
-			caretAnchor_ = 0;
-			extendSelection = true;
-			__fallthrough;
-
-		case SetSelectionModeLast:
-			caretPosition_ = UINT32_MAX;
-			caretPositionOffset_ = 0;
-			AlignCaretToNearestCluster(true);
-			break;
-
-		case SetSelectionModeAbsoluteLeading:
-			caretPosition_ = advance;
-			caretPositionOffset_ = 0;
-			break;
-
-		case SetSelectionModeAbsoluteTrailing:
-			caretPosition_ = advance;
-			AlignCaretToNearestCluster(true);
-			break;
-		}
-
-		absolutePosition = caretPosition_ + caretPositionOffset_;
-
-		if (!extendSelection)
-			caretAnchor_ = absolutePosition;
-
-		bool caretMoved = (absolutePosition != oldAbsolutePosition)
-			|| (caretAnchor_ != oldCaretAnchor);
-
-		if (caretMoved)
-		{
-#if 0
-			// update the caret formatting attributes
-			if (updateCaretFormat)
-				UpdateCaretFormatting();
-
-			PostRedraw();
-
-			RectF rect;
-			GetCaretRect(rect);
-			UpdateSystemCaret(rect);
-#endif
-		}
-
-		return caretMoved;
-	}
-
-	void GetViewMatrix(OUT DWRITE_MATRIX* matrix) const
-	{
-		// Generates a view matrix from the current origin, angle, and scale.
-		// Need the editor size for centering.
-		RECT rect;
-		GetClientRect(&rect);
-
-		// Translate the origin to 0,0
-		DWRITE_MATRIX translationMatrix = {
-			1, 0,
-			0, 1,
-			-originX_, -originY_
-		};
-		// Scale and rotate
-		double radians = DegreesToRadians(fmod(angle_, 360.0f));
-		double cosValue = cos(radians);
-		double sinValue = sin(radians);
-
-		// If rotation is a quarter multiple, ensure sin and cos are exactly one of {-1,0,1}
-		if (fmod(angle_, 90.0f) == 0)
-		{
-			cosValue = floor(cosValue + .5);
-			sinValue = floor(sinValue + .5);
-		}
-
-		DWRITE_MATRIX rotationMatrix = {
-			float(cosValue * scaleX_), float(sinValue * scaleX_),
-			float(-sinValue * scaleY_), float(cosValue * scaleY_),
-			0, 0
-		};
-
-		// Set the origin in the center of the window
-		float centeringFactor = .5f;
-		DWRITE_MATRIX centerMatrix = {
-			1, 0,
-			0, 1,
-			floor(float(rect.right * centeringFactor)), floor(float(rect.bottom * centeringFactor))
-		};
-
-		D2D1::Matrix3x2F resultA, resultB;
-
-		resultB.SetProduct(Cast(translationMatrix), Cast(rotationMatrix));
-		resultA.SetProduct(resultB, Cast(centerMatrix));
-
-		// For better pixel alignment (less blurry text)
-		resultA._31 = floor(resultA._31);
-		resultA._32 = floor(resultA._32);
-
-		*matrix = *reinterpret_cast<DWRITE_MATRIX*>(&resultA);
-	}
-
-	void GetInverseViewMatrix(OUT DWRITE_MATRIX* matrix) const
-	{
-		// Inverts the view matrix for hit-testing and scrolling.
-		DWRITE_MATRIX viewMatrix;
-		GetViewMatrix(&viewMatrix);
-		ComputeInverseMatrix(viewMatrix, *matrix);
-	}
-
-	bool SetSelectionFromPoint(float x, float y, bool extendSelection)
-	{
-		// Returns the text position corresponding to the mouse x,y.
-		// If hitting the trailing side of a cluster, return the
-		// leading edge of the following text position.
-		BOOL isTrailingHit;
-		BOOL isInside;
-		DWRITE_HIT_TEST_METRICS caretMetrics;
-#if 10
-		// Remap display coordinates to actual.
-		DWRITE_MATRIX matrix;
-		GetInverseViewMatrix(&matrix);
-#endif 
-		float transformedX = (x * matrix.m11 + y * matrix.m21 + matrix.dx);
-		float transformedY = (x * matrix.m12 + y * matrix.m22 + matrix.dy);
-
-		m_textLayout->HitTestPoint(
-			transformedX,
-			transformedY,
-			&isTrailingHit,
-			&isInside,
-			&caretMetrics
-		);
-
-		// Update current selection according to click or mouse drag.
-		SetSelection(
-			isTrailingHit ? SetSelectionModeAbsoluteTrailing : SetSelectionModeAbsoluteLeading,
-			caretMetrics.textPosition,
-			extendSelection
-		);
-
 		return true;
 	}
 
