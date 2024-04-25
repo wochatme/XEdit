@@ -30,7 +30,7 @@ class CView : public CWindowImpl<CView>
 	int  m_nInputWinHeight = 100;
 
 	CWorkView m_workView;
-	CTXTView m_txtView;
+	CTxtView m_txtView;
 	CInputView m_inputView;
 	
 	U8* m_inputBuf = nullptr;
@@ -1342,15 +1342,18 @@ public:
 			char ch = m_inputView.sci_GetCharAtPosition(pos - 1);
 			if (ch == '\n' && heldControl == false) /* the user hit the ENTER key */
 			{
-				int len;
+				U8* p;
 				U32 input_len = 0;
 				m_inputView.sci_GetTextLength(input_len);
 				if (input_len > INPUT_BUF_INPUT_MAX - 9) /* we only allow 256KB input data */
 					input_len = INPUT_BUF_INPUT_MAX - 9;
 				
-				len = m_inputView.sci_GetText((char*)m_inputBuf, INPUT_BUF_INPUT_MAX);
-				m_inputBuf[len] = '\0';
-
+				p = m_inputBuf;
+				*p++ = 0xF0; *p++ = 0x9F; *p++ = 0x99; *p++ = 0x82; *p++ = '\n';
+				m_inputView.sci_GetText((char*)p, INPUT_BUF_INPUT_MAX);
+				p[input_len] = '\n';
+				p[input_len+1] = '\n';
+				m_txtView.AppendText((const char*)m_inputBuf, input_len + 6);
 				m_inputView.sci_SetText("");
 			}
 		}

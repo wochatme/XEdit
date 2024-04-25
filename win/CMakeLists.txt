@@ -1,5 +1,5 @@
 # the build for Windows X64
-project(xterm-win64 CXX)
+project(xedit-win64 CXX)
 
 set(XEDITAPP_DIR "${CMAKE_CURRENT_LIST_DIR}"
     CACHE PATH "XEdit application directory")
