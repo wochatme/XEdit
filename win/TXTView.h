@@ -4,7 +4,28 @@
 
 #pragma once
 
-WCHAR title[MAX_PATH + 1] = { 0 };
+#define IsSpaceCharacter(p)		(((p) == L' ') || ((p) == L'\t') || ((p) == L'\n') || ((p) == L'\r'))
+#define IsAlphabet(p)		((((p) >= L'0') && ((p) <= L'9')) || (((p) >= L'a') && ((p) <= L'z')) || (((p) >= L'A') && ((p) <= L'Z')))
+
+WCHAR url[MAX_PATH + 1] = { 0 };
+
+WCHAR greeting_[] =
+{
+	0xd83d,0xde42,0x000a,0x0048,0x0065,0x006c,0x006c,0x006f,
+	0x0021,0x0020,0x0049,0x0066,0x0020,0x0079,0x006f,0x0075,
+	0x0020,0x0068,0x0061,0x0076,0x0065,0x0020,0x0061,0x006e,
+	0x0079,0x0020,0x0071,0x0075,0x0065,0x0073,0x0074,0x0069,
+	0x006f,0x006e,0x002c,0x0020,0x0070,0x006c,0x0065,0x0061,
+	0x0073,0x0065,0x0020,0x0074,0x0079,0x0070,0x0065,0x0020,
+	0x0069,0x006e,0x0020,0x0074,0x0068,0x0065,0x0020,0x0062,
+	0x0065,0x006c,0x006f,0x0077,0x0020,0x0077,0x0069,0x006e,
+	0x0064,0x006f,0x0077,0x0020,0x0061,0x006e,0x0064,0x0020,
+	0x0070,0x0072,0x0065,0x0073,0x0073,0x0020,0x0045,0x004e,
+	0x0054,0x0045,0x0052,0x0020,0x006b,0x0065,0x0079,0x002e,
+	0x000a,0x000a,0x0000
+};
+
+#define TEXT_BUFFER_BLOCK		(1<<20)
 
 #define DECLARE_WND_CLASS_TEXT(WndClassName) \
 static ATL::CWndClassInfo& GetWndClassInfo() \
@@ -16,6 +37,37 @@ static ATL::CWndClassInfo& GetWndClassInfo() \
 		NULL, NULL, IDC_IBEAM, TRUE, 0, _T("") \
 	}; \
 	return wc; \
+}
+
+// look for "https://"
+U32 FindWordInText(WCHAR* data, U32 length, U32 pos, U32& startPos, U32& endPos)
+{
+	if (pos < length && data)
+	{
+		WCHAR* p;
+		U32 i;
+		i = pos;
+		p = data + pos;
+		while (i > 0)
+		{
+			if (!IsAlphabet(*p))
+				break;
+				p--;
+				i--;
+		}
+		startPos = i+1;
+		i = pos;
+		p = data + pos;
+		while (i < length)
+		{
+			if (!IsAlphabet(*p))
+				break;
+			p++;
+			i++;
+		}
+		endPos = i;
+	}
+	return 0;
 }
 
 // look for "https://"
@@ -95,13 +147,13 @@ class CTxtView : public CScrollWindowImpl<CTxtView>
 	// trailing side of a surrogate pair at the beginning of the
 	// text would place the position at zero and offset of two.
 	// So to get the absolute leading position, sum the two.
-	UINT32 caretAnchor_ = 0;
-	UINT32 caretPosition_ = 0;
-	UINT32 caretPositionOffset_ = 0;    // > 0 used for trailing edge
+	U32 m_caretAnchor = 0;
+	U32 m_caretPosition = 0;
+	U32 m_caretPositionOffset = 0;    // > 0 used for trailing edge
 
 	////////////////////
 	// Mouse manipulation
-	bool currentlySelecting_ : 1;
+	bool m_currentlySelecting : 1;
 	bool currentlyPanning_ : 1;
 	float previousMouseX = 0;
 	float previousMouseY = 0;
@@ -137,6 +189,7 @@ class CTxtView : public CScrollWindowImpl<CTxtView>
 	ID2D1SolidColorBrush* m_pBrushText = nullptr;
 	float m_deviceScaleFactor = 1.f;
 
+	int m_lineHeight = 18;
 public:
 	DECLARE_WND_CLASS_TEXT(NULL)
 
@@ -145,11 +198,11 @@ public:
 		d2dFactory_ = g_pD2DFactory;
 		dwriteFactory_ = g_pDWriteFactory;
 
-		caretPosition_ = 0;
-		caretAnchor_ = 0;
-		caretPositionOffset_ = 0;
+		m_caretPosition = 0;
+		m_caretAnchor = 0;
+		m_caretPositionOffset = 0;
 
-		currentlySelecting_ = false;
+		m_currentlySelecting = false;
 		currentlyPanning_ = false;
 		previousMouseX = 0;
 		previousMouseY = 0;
@@ -161,7 +214,7 @@ public:
 		originY_ = 0;
 
 		m_dataLen = 0;
-		m_dataMax = (1 << 20);
+		m_dataMax = TEXT_BUFFER_BLOCK;
 		m_dataBuf = (WCHAR*)VirtualAlloc(NULL, m_dataMax, MEM_COMMIT, PAGE_READWRITE);
 		ATLASSERT(m_dataBuf);
 	}
@@ -192,8 +245,8 @@ public:
 	{
 		const long width = rc.right - rc.left;
 		const long height = rc.bottom - rc.top;
-		const UINT32 scaledWidth = width * scaleFactor;
-		const UINT32 scaledHeight = height * scaleFactor;
+		const U32 scaledWidth = width * scaleFactor;
+		const U32 scaledHeight = height * scaleFactor;
 		return D2D1::SizeU(scaledWidth, scaledHeight);
 	}
 
@@ -245,13 +298,13 @@ public:
 	{
 		// Returns a valid range of the current selection,
 		// regardless of whether the caret or anchor is first.
-		UINT32 caretBegin = caretAnchor_;
-		UINT32 caretEnd = caretPosition_ + caretPositionOffset_;
+		U32 caretBegin = m_caretAnchor;
+		U32 caretEnd = m_caretPosition + m_caretPositionOffset;
 		if (caretBegin > caretEnd)
 			std::swap(caretBegin, caretEnd);
 
 		// Limit to actual text length.
-		UINT32 textLength = m_dataLen;
+		U32 textLength = m_dataLen;
 		caretBegin = std::min(caretBegin, textLength);
 		caretEnd = std::min(caretEnd, textLength);
 
@@ -276,7 +329,7 @@ public:
 			if (m_textLayout)
 			{
 				DWRITE_TEXT_RANGE caretRange = GetSelectionRange();
-				UINT32 actualHitTestCount = 0;
+				U32 actualHitTestCount = 0;
 				if (caretRange.length > 0)
 				{
 					m_textLayout->HitTestTextRange(
@@ -300,7 +353,7 @@ public:
 						0, // x
 						0, // y
 						&hitTestMetrics[0],
-						static_cast<UINT32>(hitTestMetrics.size()),
+						static_cast<U32>(hitTestMetrics.size()),
 						&actualHitTestCount
 					);
 				}
@@ -347,10 +400,14 @@ public:
 		MESSAGE_HANDLER(WM_MOUSEHOVER, OnMouseHover)
 		MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
 		MESSAGE_HANDLER(WM_LBUTTONUP, OnLButtonUp)
+		MESSAGE_HANDLER(WM_RBUTTONUP, OnRBtnUp)
+		MESSAGE_HANDLER(WM_LBUTTONDBLCLK, OnLBtnDbClk)
 		MESSAGE_HANDLER(WM_SETCURSOR, OnSetCursor)
 		MESSAGE_HANDLER(WM_SIZE, OnSize)
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+		COMMAND_ID_HANDLER(ID_EDIT_SELECT_ALL, OnEditSelectAll)
+		COMMAND_ID_HANDLER(ID_EDIT_COPY, OnEditCopy)
 		CHAIN_MSG_MAP(CScrollWindowImpl<CTxtView>)
 	END_MSG_MAP()
 
@@ -380,16 +437,34 @@ public:
 		HRESULT hr = dwriteFactory_->CreateTextFormat(L"Courier New", NULL,
 			DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
 			15.5f, L"en-US", &m_textFormat);
-#if 0
-		ATLASSERT(m_dataBuf == nullptr);
 
-		m_dataLen = 0;
-		m_dataMax = (1 << 20);
-		m_dataBuf = (WCHAR*)VirtualAlloc(NULL, m_dataMax, MEM_COMMIT, PAGE_READWRITE);
-		ATLASSERT(m_dataBuf);
-		hr = CreateRenderTarget();
-		ATLASSERT(hr == S_OK);
-#endif
+		if (hr == S_OK && m_textFormat)
+		{
+			size_t len = wcslen(greeting_);
+			wchar_t strEnglish[2] = { 0x0058,0 };
+			IDWriteTextLayout* pTextLayout = nullptr;
+			hr = dwriteFactory_->CreateTextLayout(strEnglish, 1, m_textFormat, 600.f, 1.f, &pTextLayout);
+			if (hr == S_OK && pTextLayout)
+			{
+				DWRITE_TEXT_METRICS tm = { 0 };
+				if (S_OK == pTextLayout->GetMetrics(&tm))
+				{
+					m_lineHeight = static_cast<int>(tm.height) + 1;
+				}
+				ReleaseUnknown(pTextLayout);
+			}
+			m_dataLen = 0;
+			for (size_t i = 0; i < len; i++)
+			{
+				m_dataBuf[i] = greeting_[i];
+				m_dataLen++;
+			}
+			m_dataBuf[m_dataLen] = L'\0';
+		}
+		SetScrollSize(1, 1);
+		SetScrollLine(1, m_lineHeight);
+		SetScrollPage(1, m_lineHeight * 10);
+
 		m_hCursor = ::LoadCursor(NULL, IDC_HAND);
 		ATLASSERT(m_hCursor);
 		return 0;
@@ -401,14 +476,29 @@ public:
 		{
 			RECT rc = { 0 };
 			GetClientRect(&rc);
-			ReleaseUnknown(m_textLayout);
-			if (m_dataLen && m_dataBuf && m_textFormat)
+			if (rc.bottom && rc.right)
 			{
-				dwriteFactory_->CreateTextLayout(m_dataBuf, m_dataLen, m_textFormat,
-					static_cast<FLOAT>(rc.right - rc.left),
-					static_cast<FLOAT>(rc.bottom - rc.top),
-					&m_textLayout);
-				MakeLinkTextUnderline();
+				if (m_dataLen && m_dataBuf && m_textFormat)
+				{
+					ReleaseUnknown(m_textLayout);
+					dwriteFactory_->CreateTextLayout(m_dataBuf, m_dataLen, m_textFormat,
+						static_cast<FLOAT>(rc.right - rc.left), 1.f,
+						&m_textLayout);
+					if (m_textLayout)
+					{
+						int hI;
+						DWRITE_TEXT_METRICS textMetrics;
+						MakeLinkTextUnderline();
+						m_textLayout->GetMetrics(&textMetrics);
+						float hf = textMetrics.layoutHeight;
+						if (hf < textMetrics.height)
+							hf = textMetrics.height;
+
+						hI = static_cast<int>(hf + 1);
+						if (hI > rc.bottom - rc.top)
+							SetScrollSize(1, hI);
+					}
+				}
 			}
 			ReleaseUnknown(m_pD2DRenderTarget);
 			Invalidate();
@@ -420,13 +510,13 @@ public:
 	{
 		POINT pt = { 0 };
 		GetScrollOffset(pt);
-#if 0
-		float xPos = static_cast<float>(GET_X_LPARAM(lParam) - pt.x);
-		float yPos = static_cast<float>(GET_Y_LPARAM(lParam) - pt.y);
-#endif 
+#if 10
+		float xPos = static_cast<float>(GET_X_LPARAM(lParam) + pt.x);
+		float yPos = static_cast<float>(GET_Y_LPARAM(lParam) + pt.y);
+#else
 		float xPos = static_cast<float>(GET_X_LPARAM(lParam));
 		float yPos = static_cast<float>(GET_Y_LPARAM(lParam));
-
+#endif 
 		m_CursorChanged = false;
 		if (m_textLayout)
 		{
@@ -443,17 +533,18 @@ public:
 					::SetCursor(m_hCursor);
 					m_CursorChanged = true;
 				}
-#if 0
+#if 10
 				if (e - s > 0)
 				{
 					U8 i = 0;
 					for (i = 0; i <= (e - s); i++)
-						title[i] = m_dataBuf[s + i];
-					title[i] = L'\0';
+						url[i] = m_dataBuf[s + i];
+					url[i] = L'\0';
 				}
 				else
 				{
-					swprintf((wchar_t*)title, MAX_PATH, L"XEdit - tp[%u],len[%u],left[%f],top[%f],w[%f],h[%f],bi[%u],it[%d],trim[%d]",
+					swprintf((wchar_t*)url, MAX_PATH, L"XEdit - x:%f, y:%f tp[%u],len[%u],left[%f],top[%f],w[%f],h[%f],bi[%u],it[%d],trim[%d]",
+						xPos, yPos,
 						cm.textPosition,
 						cm.length,
 						cm.left,
@@ -465,12 +556,16 @@ public:
 						cm.isTrimmed
 					);
 				}
-				::SetWindowTextW(GetParent(), title);
+				if (::IsWindow(g_hWnd))
+				{
+					HWND hWnd = GetTopWindow();
+					::PostMessage(g_hWnd, WM_FROM_CHILD_WIN_MSG, (WPARAM)url, 0);
+				}
 #endif 
 			}
 		}
 
-		if (currentlySelecting_)
+		if (m_currentlySelecting)
 		{
 			// Drag current selection.
 			//SetSelectionFromPoint(xPos, yPos, true);
@@ -480,8 +575,8 @@ public:
 			HRESULT hr = m_textLayout->HitTestPoint(xPos, yPos, &isTrailingHit, &isInside, &cm);
 			if (hr == S_OK)
 			{
-				caretPosition_ = cm.textPosition;
-				caretPositionOffset_ = 0;
+				m_caretPosition = cm.textPosition;
+				m_caretPositionOffset = 0;
 				Invalidate();
 			}
 		}
@@ -500,6 +595,15 @@ public:
 
 	LRESULT OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
+		int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+		if (delta >= 0)
+		{
+			ScrollLineUp();
+		}
+		else
+		{
+			ScrollLineDown();
+		}
 		return 1;
 	}
 
@@ -515,14 +619,16 @@ public:
 
 	LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
-		float xPos = static_cast<float>(GET_X_LPARAM(lParam));
-		float yPos = static_cast<float>(GET_Y_LPARAM(lParam));
+		POINT pt = { 0 };
+		GetScrollOffset(pt);
+		float xPos = static_cast<float>(GET_X_LPARAM(lParam) + pt.x);
+		float yPos = static_cast<float>(GET_Y_LPARAM(lParam) + pt.y);
 
 		SetFocus();
 		SetCapture();
 
 		// Start dragging selection.
-		currentlySelecting_ = true;
+		m_currentlySelecting = true;
 		bool heldShift = (GetKeyState(VK_SHIFT) & 0x80) != 0;
 		//SetSelectionFromPoint(xPos, yPos, heldShift);
 		if (m_textLayout)
@@ -533,9 +639,9 @@ public:
 			HRESULT hr = m_textLayout->HitTestPoint(xPos, yPos, &isTrailingHit, &isInside, &cm);
 			if (hr == S_OK)
 			{
-				caretAnchor_ = cm.textPosition;
-				caretPosition_ = caretAnchor_;
-				caretPositionOffset_ = 0;
+				m_caretAnchor = cm.textPosition;
+				m_caretPosition = m_caretAnchor;
+				m_caretPositionOffset = 0;
 				Invalidate();
 			}
 		}
@@ -544,8 +650,10 @@ public:
 
 	LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
-		float xPos = static_cast<float>(GET_X_LPARAM(lParam));
-		float yPos = static_cast<float>(GET_Y_LPARAM(lParam));
+		POINT pt = { 0 };
+		GetScrollOffset(pt);
+		float xPos = static_cast<float>(GET_X_LPARAM(lParam) + pt.x);
+		float yPos = static_cast<float>(GET_Y_LPARAM(lParam) + pt.y);
 #if 10
 		ReleaseCapture();
 		m_CursorChanged = false;
@@ -566,23 +674,74 @@ public:
 				}
 				if (e - s > 0)
 				{
-#if 0
 					U8 i = 0;
 					for (i = 0; i <= (e - s); i++)
-						title[i] = m_dataBuf[s + i];
-					title[i] = L'\0';
-#endif 
+					{
+						url[i] = m_dataBuf[s + i];
+					}
+					url[i] = L'\0';
+					ShellExecute(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#if 0
 					MessageBox(L"LINK", L"LINK", MB_OK);
+#endif 
 				}
-				caretPosition_ = cm.textPosition;
-				caretPositionOffset_ = 0;
+				m_caretPosition = cm.textPosition;
+				m_caretPositionOffset = 0;
 				Invalidate();
 			}
 		}
 #endif 
 		//MirrorXCoordinate(x);
 
-		currentlySelecting_ = false;
+		m_currentlySelecting = false;
+		return 0;
+	}
+
+	LRESULT OnLBtnDbClk(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled)
+	{
+		POINT pt = { 0 };
+		GetScrollOffset(pt);
+		float xPos = static_cast<float>(GET_X_LPARAM(lParam) + pt.x);
+		float yPos = static_cast<float>(GET_Y_LPARAM(lParam) + pt.y);
+
+		if (m_textLayout)
+		{
+			BOOL isTrailingHit = FALSE;
+			BOOL isInside = FALSE;
+			DWRITE_HIT_TEST_METRICS cm = { 0 };
+
+			HRESULT hr = m_textLayout->HitTestPoint(xPos, yPos, &isTrailingHit, &isInside, &cm);
+			if (hr == S_OK && cm.textPosition < m_dataLen)
+			{
+				U32 s = 0, e = 0;
+				FindWordInText(m_dataBuf, m_dataLen, cm.textPosition, s, e);
+				m_caretAnchor = s;
+				m_caretPosition = e;
+				m_caretPositionOffset = 0;
+				Invalidate();
+			}
+		}
+		return 0;
+	}
+
+	LRESULT OnRBtnUp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled)
+	{
+		bool bSelected = (m_caretAnchor != m_caretPosition + m_caretPositionOffset) ? true : false;
+		bool bHaveContext = (m_dataLen) ? true : false;
+
+		if (bSelected || bHaveContext)
+		{
+			POINT pt;
+			HMENU hMenu;
+			GetCursorPos(&pt);
+			hMenu = CreatePopupMenu();
+
+			if(bSelected)
+				AppendMenu(hMenu, MF_STRING | MF_ENABLED, ID_EDIT_COPY, _T("Copy"));
+			if(bHaveContext)
+				AppendMenu(hMenu, MF_STRING | MF_ENABLED, ID_EDIT_SELECT_ALL, _T("Select All"));
+			TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON, pt.x, pt.y, 0, m_hWnd, NULL);
+		}
 		return 0;
 	}
 
@@ -607,8 +766,7 @@ public:
 				ReleaseUnknown(m_textLayout);
 				ATLASSERT(m_textFormat);
 				dwriteFactory_->CreateTextLayout(m_dataBuf, m_dataLen, m_textFormat,
-					static_cast<FLOAT>(rc.right - rc.left),
-					static_cast<FLOAT>(1),
+					static_cast<FLOAT>(rc.right - rc.left), 1.f,
 					&m_textLayout);
 
 				if (m_textLayout)
@@ -670,4 +828,53 @@ public:
 		return true;
 	}
 
+	LRESULT OnEditSelectAll(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		ATLASSERT(m_dataLen);
+		m_caretAnchor = 0;
+		m_caretPosition = m_dataLen - 1;
+		m_caretPositionOffset = 0;
+		
+		Invalidate();
+
+		return true;
+	}
+
+	LRESULT OnEditCopy(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		ATLASSERT(m_dataLen);
+		DWRITE_TEXT_RANGE selectionRange = GetSelectionRange();
+
+		if (selectionRange.length > 0)
+		{
+			// Open and empty existing contents.
+			if (OpenClipboard())
+			{
+				if (EmptyClipboard())
+				{
+					// Allocate room for the text
+					size_t byteSize = sizeof(wchar_t) * (selectionRange.length + 1);
+					HGLOBAL hClipboardData = GlobalAlloc(GMEM_DDESHARE | GMEM_ZEROINIT, byteSize);
+					if (hClipboardData != NULL)
+					{
+						void* memory = GlobalLock(hClipboardData);  // [byteSize] in bytes
+
+						if (memory != NULL)
+						{
+							// Copy text to memory block.
+							memcpy(memory, m_dataBuf + selectionRange.startPosition, byteSize);
+							GlobalUnlock(hClipboardData);
+							if (SetClipboardData(CF_UNICODETEXT, hClipboardData) != NULL)
+							{
+								hClipboardData = NULL; // system now owns the clipboard, so don't touch it.
+							}
+						}
+						GlobalFree(hClipboardData); // free if failed
+					}
+				}
+				CloseClipboard();
+			}
+		}
+		return true;
+	}
 };

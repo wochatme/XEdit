@@ -1365,7 +1365,7 @@ public:
 					input_len = INPUT_BUF_INPUT_MAX - 9;
 				
 				p = m_inputBuf;
-				*p++ = 0xF0; *p++ = 0x9F; *p++ = 0x99; *p++ = 0x82; *p++ = '\n';
+				*p++ = 0xF0; *p++ = 0x9F; *p++ = 0xA4; *p++ = 0x9A; *p++ = '\n';
 				m_inputView.sci_GetText((char*)p, INPUT_BUF_INPUT_MAX);
 				p[input_len] = '\n';
 				p[input_len+1] = '\n';
@@ -1409,6 +1409,11 @@ public:
 	int DoEditUndo()
 	{
 		m_inputView.DoEditUndo();
+		return 0;
+	}
+
+	int DoEditSelectAll()
+	{
 		return 0;
 	}
 

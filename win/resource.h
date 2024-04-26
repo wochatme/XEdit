@@ -6,7 +6,25 @@
 
 #define IDD_ABOUTBOX				100
 #define IDR_MAINFRAME				128
+#define ID_EDIT_CONFIGURATION       130
 //#define IDR_XEDITTYPE	129
+
+#define IDD_CONFIGURAION                200
+#define IDC_EDIT_SERVER_KEY             201
+#define IDC_EDIT_SERVER_URL             202
+#define IDC_EDIT_DATA_DIRECTORY         203
+#define IDC_BTN_BROWSER                 204
+#define IDC_EDIT_NETWORK_TIMEOUT        205
+#define IDC_BTN_FONT                    206
+#define IDC_COMBO_NETWORK_PROXY_TYPE    207
+#define IDC_EDIT_NETWORK_PROXY          208
+#define IDC_CHECK_AI_STARTUP            209
+#define IDC_CHECK_SHARE_SCREEN          210
+#define IDC_CHECK_AUTO_LOGGING          211
+#define IDC_CHECK_AI_IS_LEFT            212
+#define IDC_EDIT_MY_PUBKEY              213
+#define IDC_STATIC_FONT                 214
+#define IDC_BTN_TTY                     215
 
 // Next default values for new objects
 // 

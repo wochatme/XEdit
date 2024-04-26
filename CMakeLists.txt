@@ -9,4 +9,5 @@ add_subdirectory(win)
 add_subdirectory(wt)
 add_subdirectory(scintilla)
 add_subdirectory(sqlite)
+add_subdirectory(secp256k1)
 

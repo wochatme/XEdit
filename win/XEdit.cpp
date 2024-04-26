@@ -16,8 +16,10 @@
 #include "InputView.h"
 #include "View.h"
 #include "aboutdlg.h"
+#include "ConfDlg.h"
 #include "MainFrm.h"
 
+HWND g_hWnd = nullptr;
 HINSTANCE g_hInstance = nullptr;
 WCHAR     g_dbFilePath[MAX_PATH + 1] = { 0 };
 
@@ -29,6 +31,8 @@ UINT g_nDPI = 96;
 static D2D1_DRAW_TEXT_OPTIONS d2dDrawTextOptions = D2D1_DRAW_TEXT_OPTIONS_NONE;
 static HMODULE hDLLD2D{};
 static HMODULE hDLLDWrite{};
+
+static XConfig X_CONFIGURATION = { 0 };
 
 volatile LONG g_threadCount = 0;
 volatile LONG g_Quit = 0;
@@ -122,7 +126,10 @@ static int App_Init(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpstrCm
 
 	if (!LoadD2D())
 		ret = 4;
-
+#if	0
+	if (zt_LoadConfiguration(hInstance, &X_CONFIGURATION, g_dbFilePath, MAX_PATH) == false)
+		ret = 1;
+#endif
 #if 0
 	g_ztConf = &ZTCONFIGURATION;
 

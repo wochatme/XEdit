@@ -23,7 +23,7 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/wtl ${CMAKE_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} libwt scintilla libsqlite)
+target_link_libraries(${PROJECT_NAME} libwt scintilla libsqlite secp256k1)
 
 target_include_directories(${PROJECT_NAME} PUBLIC c:/gpt/vcpkg/packages/curl_x64-windows-static/include)
 

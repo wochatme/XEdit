@@ -96,10 +96,11 @@ BEGIN
     POPUP "&Edit"
     BEGIN
         MENUITEM "&Undo\tCtrl+Z",               ID_EDIT_UNDO
-        MENUITEM SEPARATOR
         MENUITEM "Cu&t\tCtrl+X",                ID_EDIT_CUT
         MENUITEM "&Copy\tCtrl+C",               ID_EDIT_COPY
         MENUITEM "&Paste\tCtrl+V",              ID_EDIT_PASTE
+        MENUITEM SEPARATOR
+        MENUITEM "Configuration",               ID_EDIT_CONFIGURATION
     END
     POPUP "&View"
     BEGIN
@@ -136,6 +137,41 @@ BEGIN
                     32
     ICON            IDR_MAINFRAME,IDC_STATIC,55,26,18,20
     GROUPBOX        "",IDC_STATIC,7,7,115,88
+END
+
+IDD_CONFIGURAION DIALOGEX 0, 0, 309, 281
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Configuration"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+PUSHBUTTON      "Cancel", IDCANCEL, 252, 261, 50, 14
+EDITTEXT        IDC_EDIT_SERVER_KEY, 7, 19, 295, 14, ES_AUTOHSCROLL
+EDITTEXT        IDC_EDIT_SERVER_URL, 7, 47, 295, 14, ES_AUTOHSCROLL
+EDITTEXT        IDC_EDIT_DATA_DIRECTORY, 7, 75, 278, 14, ES_AUTOHSCROLL
+PUSHBUTTON      "...", IDC_BTN_BROWSER, 287, 75, 15, 14
+EDITTEXT        IDC_EDIT_NETWORK_TIMEOUT, 108, 94, 33, 14, ES_AUTOHSCROLL | ES_NUMBER
+PUSHBUTTON      "Font", IDC_BTN_FONT, 261, 94, 41, 14
+COMBOBOX        IDC_COMBO_NETWORK_PROXY_TYPE, 7, 122, 295, 30, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+EDITTEXT        IDC_EDIT_NETWORK_PROXY, 7, 148, 295, 14, ES_AUTOHSCROLL
+CONTROL         "Show AI Window When Startup", IDC_CHECK_AI_STARTUP,
+"Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 167, 117, 10
+CONTROL         "Put AI Window on the Left Side", IDC_CHECK_AI_IS_LEFT,
+"Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 180, 116, 10
+CONTROL         "Send Screen Information to Server When Asking Question", IDC_CHECK_SHARE_SCREEN,
+"Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 193, 201, 10
+CONTROL         "Logging Chat Messages Automatically", IDC_CHECK_AUTO_LOGGING,
+"Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 206, 136, 10
+EDITTEXT        IDC_EDIT_MY_PUBKEY, 7, 234, 295, 14, ES_AUTOHSCROLL | ES_READONLY
+PUSHBUTTON      "TTY Configuration", IDC_BTN_TTY, 7, 261, 76, 14
+DEFPUSHBUTTON   "OK", IDOK, 198, 261, 50, 14
+RTEXT           "Courier New  11 points", IDC_STATIC_FONT, 147, 97, 110, 9
+LTEXT           "Server's Public Key :", IDC_STATIC, 7, 8, 93, 8
+LTEXT           "Server's Calling Interface :", IDC_STATIC, 7, 36, 93, 8
+LTEXT           "Data Cache Directory :", IDC_STATIC, 7, 64, 93, 8
+LTEXT           "Network Timeout in Seconds :", IDC_STATIC, 7, 97, 100, 8
+LTEXT           "Network Proxy Type :", IDC_STATIC, 7, 111, 93, 8
+LTEXT           "Network Proxy String :", IDC_STATIC, 7, 137, 93, 8
+LTEXT           "My Public Key :", IDC_STATIC, 7, 223, 93, 8
 END
 
 

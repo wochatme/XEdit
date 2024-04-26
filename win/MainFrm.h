@@ -35,13 +35,18 @@ public:
 	END_UPDATE_UI_MAP()
 
 	BEGIN_MSG_MAP(CMainFrame)
+		MESSAGE_HANDLER(WM_FROM_CHILD_WIN_MSG, OnFromChild)
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
 		COMMAND_ID_HANDLER(ID_EDIT_COPY, OnEditCopy)
 		COMMAND_ID_HANDLER(ID_EDIT_PASTE, OnEditPaste)
 		COMMAND_ID_HANDLER(ID_EDIT_CUT, OnEditCut)
 		COMMAND_ID_HANDLER(ID_EDIT_UNDO, OnEditUndo)
+#if 0
+		COMMAND_ID_HANDLER(ID_EDIT_SELECT_ALL, OnEditSelectAll)
+#endif
 		COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
+		COMMAND_ID_HANDLER(ID_EDIT_CONFIGURATION, OnEditConfiguration)
 		COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_VIEW_STATUS_BAR, OnViewStatusBar)
@@ -57,6 +62,7 @@ public:
 
 	LRESULT OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
+		g_hWnd = m_hWnd;
 		// create command bar window
 		HWND hWndCmdBar = m_CmdBar.Create(m_hWnd, rcDefault, NULL, ATL_SIMPLE_CMDBAR_PANE_STYLE);
 		// attach menu
@@ -104,6 +110,17 @@ public:
 		return 1;
 	}
 
+	
+	LRESULT OnFromChild(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+	{
+		WCHAR* t = (WCHAR*)wParam;
+		if (t)
+		{
+			SetWindowText(t);
+		}
+		return 0;
+	}
+
 	LRESULT OnFileExit(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		PostMessage(WM_CLOSE);
@@ -135,6 +152,14 @@ public:
 		::ShowWindow(m_hWndStatusBar, bVisible ? SW_SHOWNOACTIVATE : SW_HIDE);
 		UISetCheck(ID_VIEW_STATUS_BAR, bVisible);
 		UpdateLayout();
+		return 0;
+	}
+
+	
+	LRESULT OnEditConfiguration(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		ConfDlg dlg;
+		dlg.DoModal();
 		return 0;
 	}
 
@@ -176,4 +201,14 @@ public:
 		return 0;
 	}
 
+	LRESULT OnEditSelectAll(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		ATLASSERT(m_view.IsWindow());
+
+		if (m_view.IsWindow())
+			m_view.DoEditSelectAll();
+
+		return 0;
+	}
+	
 };
