@@ -579,13 +579,14 @@ public:
 #endif 
 
 		ATLASSERT(m_workView.IsWindow());
+#if 0
 		m_workView.sci_SetTechnology(SC_TECHNOLOGY_DIRECTWRITE);
 		m_workView.sci_SetCodePage(SC_CP_UTF8);
 		m_workView.sci_SetEOLMode(SC_EOL_LF);
 		m_workView.sci_SetWrapMode(SC_WRAP_WORD);
 		m_workView.sci_StyleSetFont(STYLE_DEFAULT, "Microsoft Yahei UI");
 		m_workView.sci_StyleSetFontSize(STYLE_DEFAULT, 11);
-
+#endif 
 		m_inputView.Create(m_hWnd, rcDefault, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
 		ATLASSERT(m_inputView.IsWindow());
 
@@ -599,6 +600,7 @@ public:
 		SetSplitterPanes(m_inputView, m_workView);
 		SetSplitterPosPct(40);
 
+		SetDefaultActivePane(SPLIT_PANE_RIGHT);
 		//bHandled = FALSE;
 		return 1;
 	}
@@ -991,7 +993,7 @@ public:
 				::SetFocus(m_hWndPane[m_nSinglePane]);
 			}
 		}
-		//bHandled = FALSE;
+		bHandled = FALSE;
 		return 1;
 	}
 
@@ -1009,6 +1011,7 @@ public:
 				if (GetSplitterPaneRect(nPane, &rcPane) && (::PtInRect(&rcPane, pt) != FALSE))
 				{
 					m_nDefActivePane = nPane;
+					::SetFocus(m_hWndPane[m_nDefActivePane]);
 					break;
 				}
 			}

@@ -28,7 +28,7 @@ class CWorkView
 {
 public:
     HWND m_hWnd = nullptr;
-#if 0
+#if 10
 	HWND Create(
 		_In_opt_ HWND hWndParent,
 		_In_ _U_RECT rect = NULL,
@@ -44,22 +44,42 @@ public:
 		si.wShowWindow = SW_HIDE;
 
 		PROCESS_INFORMATION pi = { 0 };
-		if (CreateProcess(L"C:\\build\\t2\\pterm2.exe", NULL, NULL, NULL, false, 0, NULL, NULL, &si, &pi))
+		ATLASSERT(::IsWindow(m_hWnd) == FALSE);
+
+		if (CreateProcess(L"C:\\Windows\\System32\\cmd.exe", NULL, NULL, NULL, false, 0, NULL, NULL, &si, &pi))
 		{
+			U32 tries = 10;
 			PROCESS_INFO procwin;
 			procwin.dwProcessId = pi.dwProcessId;
 			procwin.hWnd = NULL;
 
-			WaitForInputIdle(pi.hProcess, 500);
+			WaitForInputIdle(pi.hProcess, 100);
 
 			EnumWindows(EnumWindowCallBack, (LPARAM)&procwin);
-			if (NULL == procwin.hWnd)
+			while (NULL == procwin.hWnd && tries)
 			{
-				Sleep(200);
+				Sleep(100);
+				tries--;
 				EnumWindows(EnumWindowCallBack, (LPARAM)&procwin);
 			}
 			m_hWnd =  procwin.hWnd;
 		}
+
+		if (IsWindow())
+		{
+			LONG_PTR dwStyle;
+			dwStyle = GetWindowLongPtr(m_hWnd, GWL_STYLE);
+			dwStyle &= ~(WS_BORDER | WS_CAPTION | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_OVERLAPPED | WS_SIZEBOX | WS_SYSMENU | WS_THICKFRAME);
+			dwStyle |= WS_CHILD;
+			::SetWindowLongPtr(m_hWnd, GWL_STYLE, dwStyle);
+			::SetWindowLong(m_hWnd, GWL_STYLE, ::GetWindowLong(m_hWnd, GWL_STYLE) & ~WS_POPUP);
+			::SetWindowLong(m_hWnd, GWL_STYLE, ::GetWindowLong(m_hWnd, GWL_STYLE) & WS_CHILD);
+			::SetParent(m_hWnd, hWndParent);
+			::ShowWindow(m_hWnd, SW_SHOW);
+			::InvalidateRect(m_hWnd, NULL, 1);
+			::UpdateWindow(m_hWnd);
+		}
+
 		return m_hWnd;
 	}
 #endif 
@@ -73,7 +93,7 @@ public:
 		return ::IsWindow(m_hWnd);
 	}
 
-
+#if 0
 	HWND Create(
 		_In_opt_ HWND hWndParent,
 		_In_ _U_RECT rect = NULL,
@@ -85,16 +105,9 @@ public:
 	{
 		m_hWnd = CreateWindowExW(0, L"Scintilla", NULL, WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL,
 			0, 0, 16, 16, hWndParent, NULL, HINST_THISCOMPONENT, NULL);
-
-		return m_hWnd;
-	}
-#if 0
-	HWND GetWindowHandle()
-	{
 		return m_hWnd;
 	}
 #endif
-
 	BOOL SetWindowPos(
 		HWND hWndInsertAfter,
 		int  X,
@@ -110,6 +123,12 @@ public:
 			bRet = ::SetWindowPos(m_hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 		}
 		return bRet;
+	}
+
+#if 0
+	HWND GetWindowHandle()
+	{
+		return m_hWnd;
 	}
 
 	int sci_SetTechnology(int mode)
@@ -226,9 +245,11 @@ public:
 		}
 		return ch;
 	}
+#endif
 
 	bool DoEditCopy()
 	{
 		return true;
 	}
+
 };
